@@ -187,6 +187,13 @@ Persona ─► Agente (Hermes · OpenClaw) ─► su LLM
 - **La cola es una tabla** (`jobs`, con `for update skip locked`). Sin Redis ni pg-boss.
 - **Los carriles** se activan con una variable `DM_*_URL`. Uno ausente aparece como `off` en
   `dm doctor`. Texto plano, Markdown y CSV se leen inline, sin carril.
+- **Medido en el Pi 4:** OCR de una boleta escaneada, menos de 1 s. Whisper `base`, una nota de
+  voz de ~10 s en 12 s, con errores de modelo chico ("vense", "S-00" por "seis cero cero").
+  Un número mal transcrito no pasa la evidencia, y eso es lo correcto: el agente puede
+  escuchar el original y corregir con `memory_set_text`. `WHISPER_MODEL=small` lee mejor y
+  tarda unas 3 veces más.
+- **Disco:** las imágenes de los sidecars pesan entre 500 y 700 MB cada una. Con los cuatro
+  carriles, el stack ocupa unos 3 GB de la SD.
 - **RAM medida en el Pi 4 en reposo:** embed ~650 MB (MiniLM multilingüe en ONNX), documents
   ~100 MB, postgres ~35 MB, worker y mcp ~25 MB cada uno.
 - **Todo se construye en el Pi, para arm64.** El código se edita en el Mac, se sincroniza
@@ -228,7 +235,7 @@ Se construye por tajadas, y cada una se prueba en el Pi antes de pasar a la sigu
 - [x] **S2** MCP (HTTP y stdio), tokens, cola de trabajo
 - [x] **S3** Dominios, clasificar, tipos, hechos con evidencia, `facts_query`, `verify`
 - [x] **S4** Carril de embeddings (ONNX multilingüe) y reindexación automática
-- [ ] **S5** Carriles OCR y Whisper
+- [x] **S5** Carriles OCR y Whisper
 - [ ] **S6** Conectado a Hermes, con el `SKILL.md`
 
 ## 12. Cómo se trabaja

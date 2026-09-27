@@ -7,8 +7,8 @@ x-app: &app
   environment: &app-env
     DM_DATABASE_URL: postgres://deizmem:${DM_DB_PASSWORD:-deizmem}@postgres:5432/deizmem
     DM_DOCUMENT_URL: ${DM_DOCUMENT_URL-http://documents:8000}
-    DM_VISION_URL: ${DM_VISION_URL-}
-    DM_AUDIO_URL: ${DM_AUDIO_URL-}
+    DM_VISION_URL: ${DM_VISION_URL-http://ocr:8000}
+    DM_AUDIO_URL: ${DM_AUDIO_URL-http://whisper:8000}
     DM_EMBED_URL: ${DM_EMBED_URL-http://embed:8000}
   volumes:
     - ./data/blobs:/data/blobs
@@ -94,3 +94,35 @@ services:
       timeout: 5s
       retries: 10
       start_period: 120s
+
+  # Printed images and scanned PDFs. Handwriting is the agent's job.
+  ocr:
+    build: services/ocr
+    image: deizmem-ocr:local
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=4).status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  # Voice notes. Language detected, never configured.
+  whisper:
+    build: services/whisper
+    image: deizmem-whisper:local
+    restart: unless-stopped
+    user: "${DM_UID:-1000}:${DM_GID:-1000}"
+    environment:
+      HOME: /tmp
+      HF_HOME: /models/hf
+      WHISPER_MODEL: ${WHISPER_MODEL:-base}
+      WHISPER_CACHE: /models/whisper
+    volumes:
+      - ./data/models:/models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=4).status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 180s
