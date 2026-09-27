@@ -44,6 +44,7 @@ const core: Record<string, Command> = {
     for (const [k, v] of Object.entries(r.lanes)) console.log(`${k.padEnd(9)} ${fmt(v)}`);
     console.log(`queue     ${r.queue.pending} pending · ${r.queue.failed} failed`);
     console.log(`memories  ${r.memories.total} total · ${r.memories.needsText} needs_text · ${r.memories.failed} failed`);
+    for (const s of r.spaces) console.log(`vectors   ${s.status} ${s.model} (${s.dimensions}d) ${s.embedded}/${s.chunks}`);
     return r.db.ok ? 0 : 1;
   },
 };

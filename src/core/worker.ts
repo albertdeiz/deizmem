@@ -1,4 +1,5 @@
 import { chunkText } from './chunk';
+import { embedMemory, reembedBatch, syncSpaces } from './ops/embeddings';
 import { claim, complete, enqueue, fail, type Job } from './jobs';
 import { laneFor } from './media';
 import { LaneRefused, type Converter, type Deps } from './ports';
@@ -89,7 +90,15 @@ export async function index(deps: Deps, memoryId: string): Promise<void> {
 export async function runJob(deps: Deps, job: Job): Promise<void> {
   const id = String(job.payload.memoryId ?? '');
   if (job.kind === 'normalize') await normalize(deps, id);
-  else if (job.kind === 'index') await index(deps, id);
+  else if (job.kind === 'index') {
+    await index(deps, id);
+    // Vectors are best effort here: a lane that is down leaves gaps that the
+    // periodic sync fills, instead of failing the indexing.
+    try { await embedMemory(deps, id); } catch { /* filled by reembed */ }
+  } else if (job.kind === 'reembed') {
+    const more = await reembedBatch(deps, Number(job.payload.spaceId));
+    if (more) await enqueue(deps.db, 'reembed', { spaceId: job.payload.spaceId });
+  }
 }
 
 /** Processes jobs until the queue is empty. Returns how many ran. */
@@ -115,9 +124,20 @@ export async function drain(deps: Deps, log: (s: string) => void = () => {}): Pr
   }
 }
 
+/** How often the worker re-checks the embed lane's model (§7). */
+const SYNC_EVERY_MS = 60_000;
+
 /** The long-running worker loop. */
 export async function work(deps: Deps, log: (s: string) => void, idleMs = 2000, signal?: AbortSignal): Promise<void> {
+  let lastSync = 0;
   while (!signal?.aborted) {
+    if (Date.now() - lastSync > SYNC_EVERY_MS) {
+      lastSync = Date.now();
+      try {
+        const s = await syncSpaces(deps);
+        if (s.action !== 'in sync' && s.action !== 'no embed lane') log(`embeddings: ${s.action}`);
+      } catch (e) { log(`embeddings sync failed: ${(e as Error).message}`); }
+    }
     const n = await drain(deps, log);
     if (n === 0) await new Promise((res) => setTimeout(res, idleMs));
   }

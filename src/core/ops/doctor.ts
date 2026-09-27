@@ -1,10 +1,12 @@
 import type { Deps, LaneHealth } from '../ports';
+import { spaceStatus, type SpaceStatus } from './embeddings';
 
 export interface DoctorReport {
   db: LaneHealth;
   lanes: Record<'document' | 'vision' | 'audio' | 'embed', LaneHealth | 'off'>;
   queue: { pending: number; failed: number };
   memories: { total: number; needsText: number; failed: number };
+  spaces: SpaceStatus[];
 }
 
 const safe = async (f: () => Promise<LaneHealth>): Promise<LaneHealth> => {
@@ -23,6 +25,7 @@ export async function doctor(deps: Deps): Promise<DoctorReport> {
   ]);
   let queue = { pending: 0, failed: 0 };
   let memories = { total: 0, needsText: 0, failed: 0 };
+  let spaces: SpaceStatus[] = [];
   if (db.ok) {
     const q = await deps.db.query<{ pending: string; failed: string }>(
       `select count(*) filter (where done_at is null and error is null) as pending,
@@ -33,6 +36,7 @@ export async function doctor(deps: Deps): Promise<DoctorReport> {
               count(*) filter (where status = 'needs_text') as needs_text,
               count(*) filter (where status = 'failed') as failed from memories`);
     memories = { total: Number(m.rows[0]!.total), needsText: Number(m.rows[0]!.needs_text), failed: Number(m.rows[0]!.failed) };
+    spaces = (await spaceStatus(deps)).filter((s) => s.status !== 'retired');
   }
-  return { db, lanes: { document, vision, audio, embed }, queue, memories };
+  return { db, lanes: { document, vision, audio, embed }, queue, memories, spaces };
 }

@@ -8,6 +8,7 @@ import { archiveDomain, classify, createDomain, editDomain, listDomains, mergeDo
 import { archiveFactType, createFactType, editFactType, listFactTypes } from '../../core/facts/registry';
 import { putFacts, queryFacts } from '../../core/facts/facts';
 import { verify } from '../../core/ops/verify';
+import { spaceStatus, syncSpaces } from '../../core/ops/embeddings';
 import { listSessions, mintPairingCode, redeemPairingCode, revokeSession } from '../../core/ops/identity';
 import { serveHttp, serveStdio } from '../mcp/server';
 import { retrieve } from '../../core/ops/retrieve';
@@ -189,6 +190,17 @@ export const commands: Record<string, Command> = {
     const [text, ...ids] = ctx.args;
     return emit(ctx, await verify(ctx.deps, await ctx.actor(), { text: text ?? '', memoryIds: ids }),
       (v) => v.ok ? 'every figure is backed' : `not in the memories: ${v.missing.join(', ')}`);
+  },
+
+  /** dm index [--status]: embedding spaces and their progress; without --status, syncs with the lane. */
+  async index(ctx) {
+    if (!ctx.flags.status) {
+      const s = await syncSpaces(ctx.deps);
+      console.log(`${s.state}: ${s.action}`);
+    }
+    const v = await spaceStatus(ctx.deps);
+    return emit(ctx, { kind: 'ok', value: v }, (xs) => xs.map((x) =>
+      `${String(x.id).padStart(3)}  ${x.status.padEnd(9)} ${x.model} (${x.dimensions}d)  ${x.embedded} / ${x.chunks} chunks`).join('\n') || '(no spaces yet)');
   },
 
   /** The long-running job loop. */

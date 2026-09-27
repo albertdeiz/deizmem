@@ -9,7 +9,7 @@ x-app: &app
     DM_DOCUMENT_URL: ${DM_DOCUMENT_URL-http://documents:8000}
     DM_VISION_URL: ${DM_VISION_URL-}
     DM_AUDIO_URL: ${DM_AUDIO_URL-}
-    DM_EMBED_URL: ${DM_EMBED_URL-}
+    DM_EMBED_URL: ${DM_EMBED_URL-http://embed:8000}
   volumes:
     - ./data/blobs:/data/blobs
   depends_on:
@@ -72,3 +72,25 @@ services:
       timeout: 5s
       retries: 5
       start_period: 40s
+
+  # Multilingual embeddings on ONNX. The model is a variable: change EMBED_MODEL
+  # and the worker rebuilds the vectors on its own (CLAUDE.md §7).
+  embed:
+    build: services/embed
+    image: deizmem-embed:local
+    restart: unless-stopped
+    # Same uid as the host user that owns ./data, like the app containers.
+    user: "${DM_UID:-1000}:${DM_GID:-1000}"
+    environment:
+      HOME: /tmp
+      HF_HOME: /models/hf
+      EMBED_MODEL: ${EMBED_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
+      EMBED_THREADS: ${EMBED_THREADS:-2}
+    volumes:
+      - ./data/models:/models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=4).status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s

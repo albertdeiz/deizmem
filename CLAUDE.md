@@ -153,6 +153,13 @@ memorias, con la misma comparación. **No comprueba unidades.**
   idiomas sin que la memoria sepa ninguno. Las dos listas se fusionan normalizando cada una
   contra su máximo.
 - `terms[]` le permite al agente sumar variantes. Es opcional.
+- **Los vecinos más cercanos siempre llenan el límite**, sean relevantes o no. Un resultado
+  vectorial por debajo de la mitad de la similitud del mejor se descarta. Es un corte relativo,
+  para que sirva con cualquier modelo.
+- **Los tokens son de 3 caracteres o más, o llevan un dígito.** Es una regla de largo, no una
+  lista de stopwords. Con 20 trozos o más, un término presente en más del 60% de ellos no
+  puede generar un resultado por sí solo (IDF). Con menos trozos, una palabra funcional
+  todavía puede colarse.
 
 **Cambiar de modelo de embeddings lo resuelve la memoria sola.** Cada combinación de modelo y
 dimensión es una fila de `embedding_spaces` (`building | active | retired`). El worker
@@ -180,6 +187,8 @@ Persona ─► Agente (Hermes · OpenClaw) ─► su LLM
 - **La cola es una tabla** (`jobs`, con `for update skip locked`). Sin Redis ni pg-boss.
 - **Los carriles** se activan con una variable `DM_*_URL`. Uno ausente aparece como `off` en
   `dm doctor`. Texto plano, Markdown y CSV se leen inline, sin carril.
+- **RAM medida en el Pi 4 en reposo:** embed ~650 MB (MiniLM multilingüe en ONNX), documents
+  ~100 MB, postgres ~35 MB, worker y mcp ~25 MB cada uno.
 - **Todo se construye en el Pi, para arm64.** El código se edita en el Mac, se sincroniza
   (`scripts/pi.sh`) y se levanta con compose en `~/Dev/deizmem` del Pi.
 
@@ -218,7 +227,7 @@ Se construye por tajadas, y cada una se prueba en el Pi antes de pasar a la sigu
 - [x] **S1** Capturar, leer (inline y markitdown), trocear, buscar, `needs_text`
 - [x] **S2** MCP (HTTP y stdio), tokens, cola de trabajo
 - [x] **S3** Dominios, clasificar, tipos, hechos con evidencia, `facts_query`, `verify`
-- [ ] **S4** Carril de embeddings (ONNX multilingüe) y reindexación automática
+- [x] **S4** Carril de embeddings (ONNX multilingüe) y reindexación automática
 - [ ] **S5** Carriles OCR y Whisper
 - [ ] **S6** Conectado a Hermes, con el `SKILL.md`
 
