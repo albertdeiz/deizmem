@@ -4,6 +4,8 @@ import { capture } from '../../core/ops/capture';
 import { list, original, setHidden, setText, show } from '../../core/ops/memories';
 import { pending, PENDING_KINDS, type PendingKind } from '../../core/ops/pending';
 import { reprocess } from '../../core/ops/reprocess';
+import { listSessions, mintPairingCode, redeemPairingCode, revokeSession } from '../../core/ops/identity';
+import { serveHttp, serveStdio } from '../mcp/server';
 import { retrieve } from '../../core/ops/retrieve';
 import { drain, work } from '../../core/worker';
 import { emit, type Command } from './io';
@@ -94,6 +96,38 @@ export const commands: Record<string, Command> = {
     return emit(ctx, await reprocess(ctx.deps, await ctx.actor(), {
       status, all: ctx.flags.all === true, by: str(ctx.flags.by) ?? null,
     }), (v) => `re-reading ${v.normalize} · re-queued for the agent ${v.requeued}`);
+  },
+
+  /** dm mcp [--stdio]: the agent's interface. HTTP by default. */
+  async mcp(ctx) {
+    if (ctx.flags.stdio) {
+      await serveStdio(ctx.deps, ctx.cfg, process.env.DM_MCP_TOKEN);
+    } else {
+      serveHttp(ctx.deps, ctx.cfg, (s) => console.log(`${new Date().toISOString()} ${s}`));
+    }
+    await new Promise(() => {}); // runs until killed
+    return 0;
+  },
+
+  /** dm pair: a one-use code, 15 minutes, to redeem with `dm token <code>`. */
+  async pair(ctx) {
+    return emit(ctx, await mintPairingCode(ctx.deps, await ctx.actor()),
+      (v) => `code ${v.code} (until ${v.expiresAt})\nredeem: dm token ${v.code} --label hermes`);
+  },
+
+  async token(ctx) {
+    return emit(ctx, await redeemPairingCode(ctx.deps, ctx.args[0] ?? '', str(ctx.flags.label)),
+      (v) => `${v.token}\n(session ${v.sessionId.slice(0, 8)}, until ${v.expiresAt}; shown once)`);
+  },
+
+  async sessions(ctx) {
+    const v = await listSessions(ctx.deps, await ctx.actor());
+    return emit(ctx, { kind: 'ok', value: v }, (xs) => xs.map((s) =>
+      `${s.id.slice(0, 8)}  ${s.channel}  ${(s.label ?? '').padEnd(12)} ${s.revoked ? 'revoked' : `until ${s.expiresAt.slice(0, 10)}`}  last ${s.lastUsedAt ?? 'never'}`).join('\n') || '(none)');
+  },
+
+  async revoke(ctx) {
+    return emit(ctx, await revokeSession(ctx.deps, await ctx.actor(), ctx.args[0] ?? ''));
   },
 
   /** The long-running job loop. */

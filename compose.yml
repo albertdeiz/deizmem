@@ -46,6 +46,22 @@ services:
     <<: *app
     command: ["worker"]
 
+  # The agent's interface. Published on the Pi's loopback only; containers on
+  # the `deizmem` network (Hermes, later) reach it as http://mcp:4319/mcp.
+  mcp:
+    <<: *app
+    command: ["mcp"]
+    environment:
+      <<: *app-env
+      DM_MCP_HOST: 0.0.0.0
+    ports:
+      - "127.0.0.1:4319:4319"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4319/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
   documents:
     build: services/documents
     image: deizmem-documents:local

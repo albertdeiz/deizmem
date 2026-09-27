@@ -211,9 +211,9 @@ agente, siguiendo el `SKILL.md`.
 
 Se construye por tajadas, y cada una se prueba en el Pi antes de pasar a la siguiente:
 
-- [ ] **S0** Esqueleto: compose, migraciones, `dm init`, `dm doctor`, sincronización al Pi
-- [ ] **S1** Capturar, leer (inline y markitdown), trocear, buscar, `needs_text`
-- [ ] **S2** MCP (HTTP y stdio), tokens, cola de trabajo
+- [x] **S0** Esqueleto: compose, migraciones, `dm init`, `dm doctor`, sincronización al Pi
+- [x] **S1** Capturar, leer (inline y markitdown), trocear, buscar, `needs_text`
+- [x] **S2** MCP (HTTP y stdio), tokens, cola de trabajo
 - [ ] **S3** Dominios, clasificar, tipos, hechos con evidencia, `facts_query`, `verify`
 - [ ] **S4** Carril de embeddings (ONNX multilingüe) y reindexación automática
 - [ ] **S5** Carriles OCR y Whisper

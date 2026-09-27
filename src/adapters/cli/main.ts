@@ -58,7 +58,7 @@ async function main(argv: string[]): Promise<number> {
       actor: { type: 'string' }, owner: { type: 'string' }, note: { type: 'string' }, text: { type: 'string' },
       title: { type: 'string' }, occurred: { type: 'string' }, filename: { type: 'string' },
       domain: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, status: { type: 'string' },
-      limit: { type: 'string' }, out: { type: 'string' }, by: { type: 'string' }, label: { type: 'string' },
+      limit: { type: 'string' }, stdio: { type: 'boolean' }, out: { type: 'string' }, by: { type: 'string' }, label: { type: 'string' },
     },
   });
   const [name, ...args] = positionals;
