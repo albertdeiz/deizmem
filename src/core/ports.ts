@@ -17,6 +17,14 @@ export interface BlobStore {
 
 export interface LaneHealth { ok: boolean; detail: string }
 
+/**
+ * A lane that is up but cannot read this particular file (a corrupt docx, a
+ * format it does not know). Not retried: the next lane gets its turn.
+ */
+export class LaneRefused extends Error {
+  constructor(message: string) { super(message); this.name = 'LaneRefused'; }
+}
+
 /** Bytes to text. One per lane; `null` in `Lanes` means not configured. */
 export interface Converter {
   extract(input: { bytes: Buffer; filename: string; mediaType: string }): Promise<{ text: string }>;

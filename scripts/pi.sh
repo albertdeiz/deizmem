@@ -11,7 +11,7 @@ sync() {
     --exclude '.env' --exclude '.env.*' ./ "$PI:$DIR/"
 }
 remote() { ssh "$PI" "cd $DIR && $*"; }
-quote() { printf '%q ' "$@"; }
+quote() { [ $# -eq 0 ] || printf '%q ' "$@"; }
 
 cmd="${1:-up}"; shift || true
 case "$cmd" in

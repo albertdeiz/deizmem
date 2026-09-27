@@ -1,4 +1,4 @@
-import type { Converter, Embedder, LaneHealth, Lanes } from '../../core/ports';
+import { LaneRefused, type Converter, type Embedder, type LaneHealth, type Lanes } from '../../core/ports';
 import type { Config } from '../../config';
 
 async function call<T>(service: string, url: string, init: RequestInit, timeoutMs: number): Promise<T> {
@@ -11,7 +11,9 @@ async function call<T>(service: string, url: string, init: RequestInit, timeoutM
   }
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`${service} answered ${res.status}${body ? `: ${body.slice(0, 300)}` : ''}`);
+    const msg = `${service} answered ${res.status}${body ? `: ${body.slice(0, 300)}` : ''}`;
+    // 4xx: the service is fine and this file is not for it. 5xx: try again later.
+    throw res.status >= 400 && res.status < 500 ? new LaneRefused(msg) : new Error(msg);
   }
   return (await res.json()) as T;
 }

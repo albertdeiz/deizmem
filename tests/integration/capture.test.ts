@@ -43,6 +43,11 @@ describe('capture → read → index → retrieve', () => {
     expect(pre.passages.length).toBeGreaterThan(0);
   });
 
+  it('does not answer with function words when the real terms are absent', async () => {
+    const found = unwrap(await retrieve(s.deps, s.actor, { query: 'la patente de la moto' }));
+    expect(found.passages.every((p) => /patente|moto/i.test(p.content))).toBe(true);
+  });
+
   it('dedupes the same file for the same owner', async () => {
     const r = unwrap(await cap({ bytes: Buffer.from('%PDF-1.4 fake'), filename: 'otra.pdf' }));
     expect(r.deduped).toBe(true);
@@ -61,6 +66,18 @@ describe('capture → read → index → retrieve', () => {
     await drain(s.deps);
     const found = unwrap(await retrieve(s.deps, s.actor, { query: 'amoxicilina' }));
     expect(found.passages[0]?.memoryId).toBe(r.id);
+  });
+
+  it('a lane refusing a file moves on instead of retrying', async () => {
+    const { LaneRefused } = await import('../../src/core/ports');
+    const refusing = { ...s.deps, lanes: { ...s.deps.lanes, document: {
+      async extract(): Promise<{ text: string }> { throw new LaneRefused('documents answered 422: not a docx'); },
+      async health() { return { ok: true, detail: 'x' }; } } } };
+    const r = unwrap(await cap({ bytes: Buffer.from('PK broken'), filename: 'roto.docx' }));
+    await drain(refusing);
+    const m = unwrap(await show(s.deps, s.actor, r.id));
+    expect(m.status).toBe('needs_text');
+    expect(m.statusDetail).toContain('refused');
   });
 
   it('agent text at capture skips the lanes', async () => {

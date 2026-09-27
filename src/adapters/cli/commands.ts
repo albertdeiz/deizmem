@@ -3,6 +3,7 @@ import { basename } from 'node:path';
 import { capture } from '../../core/ops/capture';
 import { list, original, setHidden, setText, show } from '../../core/ops/memories';
 import { pending, PENDING_KINDS, type PendingKind } from '../../core/ops/pending';
+import { reprocess } from '../../core/ops/reprocess';
 import { retrieve } from '../../core/ops/retrieve';
 import { drain, work } from '../../core/worker';
 import { emit, type Command } from './io';
@@ -85,6 +86,14 @@ export const commands: Record<string, Command> = {
       PENDING_KINDS.map((k) => `${k} ${v.counts[k]}`).join(' · '),
       ...v.items.map((m) => `${m.id.slice(0, 8)}  ${m.reasons.join(',').padEnd(24)} ${m.title ?? m.filename ?? ''}${m.statusDetail ? `  (${m.statusDetail})` : ''}`),
     ].join('\n'));
+  },
+
+  /** dm reprocess [--status needs_text,failed] [--all] [--by <agent>] */
+  async reprocess(ctx) {
+    const status = str(ctx.flags.status)?.split(',').map((s) => s.trim()).filter(Boolean);
+    return emit(ctx, await reprocess(ctx.deps, await ctx.actor(), {
+      status, all: ctx.flags.all === true, by: str(ctx.flags.by) ?? null,
+    }), (v) => `re-reading ${v.normalize} · re-queued for the agent ${v.requeued}`);
   },
 
   /** The long-running job loop. */

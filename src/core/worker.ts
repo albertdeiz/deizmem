@@ -1,7 +1,7 @@
 import { chunkText } from './chunk';
 import { claim, complete, enqueue, fail, type Job } from './jobs';
 import { laneFor } from './media';
-import type { Converter, Deps } from './ports';
+import { LaneRefused, type Converter, type Deps } from './ports';
 
 /** Below this a document lane "read" nothing: a scanned PDF with no text layer. */
 const POOR_TEXT_CHARS = 100;
@@ -43,7 +43,14 @@ export async function normalize(deps: Deps, memoryId: string): Promise<void> {
   const tried: string[] = [];
   for (const [lane, conv] of plan) {
     if (!conv) { tried.push(`${lane}: off`); continue; }
-    const { text } = await conv.extract(input); // a lane that is down throws: the job retries
+    let text: string;
+    try {
+      ({ text } = await conv.extract(input)); // a lane that is down throws: the job retries
+    } catch (e) {
+      if (!(e instanceof LaneRefused)) throw e;
+      tried.push(`${lane}: refused (${e.message.slice(0, 120)})`);
+      continue;
+    }
     if (text.trim().length >= (lane === 'document' ? POOR_TEXT_CHARS : 1)) {
       await store(deps, m.id, text, lane);
       return;

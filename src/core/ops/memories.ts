@@ -97,7 +97,7 @@ export async function list(deps: Deps, actor: Actor, input: ListInput = {}): Pro
 /** "a b c" → "a:* | b | c:*": OR of tokens, prefix for 4+ characters (§7). */
 export function orQuery(q: string, extra: string[] = []): string | null {
   const terms = [...new Set([q, ...extra].join(' ').normalize('NFKC').toLowerCase()
-    .split(/[^\p{L}\p{N}]+/u).filter((t) => t.length >= 2))];
+    .split(/[^\p{L}\p{N}]+/u).filter((t) => t.length >= 3 || /\p{N}/u.test(t)))];
   return terms.length ? terms.map(term).join(' | ') : null;
 }
 

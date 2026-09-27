@@ -55,6 +55,12 @@ export async function capture(deps: Deps, actor: Actor, input: CaptureInput): Pr
       'select id, status from memories where owner_id = $1 and blob_sha256 = $2 order by captured_at limit 1',
       [actor.ownerId, sha]);
     if (dup.rows[0]) {
+      // Same bytes again: keep the memory, but fill a name or a type it was missing.
+      // Fills gaps only; nothing already known is overwritten.
+      await deps.db.query(
+        `update memories set filename = coalesce(filename, $2),
+                media_type = case when media_type = 'application/octet-stream' then $3 else media_type end
+          where id = $1`, [dup.rows[0].id, input.filename ?? null, mediaType]);
       return ok({ id: dup.rows[0].id, status: dup.rows[0].status, deduped: true, sha256: sha, mediaType });
     }
     await deps.blobs.put(sha, bytes);

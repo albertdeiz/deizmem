@@ -51,7 +51,15 @@ const core: Record<string, Command> = {
 async function main(argv: string[]): Promise<number> {
   const { positionals, values } = parseArgs({
     args: argv, allowPositionals: true, strict: false,
-    options: { json: { type: 'boolean' }, actor: { type: 'string' }, yes: { type: 'boolean' } },
+    // Every option is declared: in non-strict mode an unknown `--note "x"` becomes a
+    // boolean and "x" a positional — which is how a note once got read as a file path.
+    options: {
+      json: { type: 'boolean' }, yes: { type: 'boolean' }, all: { type: 'boolean' }, wait: { type: 'boolean' },
+      actor: { type: 'string' }, owner: { type: 'string' }, note: { type: 'string' }, text: { type: 'string' },
+      title: { type: 'string' }, occurred: { type: 'string' }, filename: { type: 'string' },
+      domain: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, status: { type: 'string' },
+      limit: { type: 'string' }, out: { type: 'string' }, by: { type: 'string' }, label: { type: 'string' },
+    },
   });
   const [name, ...args] = positionals;
   const all: Record<string, Command> = { ...core, ...memoryCommands };
