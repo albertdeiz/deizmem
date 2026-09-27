@@ -1,0 +1,58 @@
+name: deizmem
+
+x-app: &app
+  build: .
+  image: deizmem-app:local
+  restart: unless-stopped
+  environment: &app-env
+    DM_DATABASE_URL: postgres://deizmem:${DM_DB_PASSWORD:-deizmem}@postgres:5432/deizmem
+    DM_DOCUMENT_URL: ${DM_DOCUMENT_URL-http://documents:8000}
+    DM_VISION_URL: ${DM_VISION_URL-}
+    DM_AUDIO_URL: ${DM_AUDIO_URL-}
+    DM_EMBED_URL: ${DM_EMBED_URL-}
+  volumes:
+    - ./data/blobs:/data/blobs
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.1-pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: deizmem
+      POSTGRES_PASSWORD: ${DM_DB_PASSWORD:-deizmem}
+      POSTGRES_DB: deizmem
+    volumes:
+      - ./data/pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U deizmem -d deizmem"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # One-shot: applies migrations and creates the first owner, then exits.
+  migrate:
+    build: .
+    image: deizmem-app:local
+    command: ["init"]
+    environment: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    <<: *app
+    command: ["worker"]
+
+  documents:
+    build: services/documents
+    image: deizmem-documents:local
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=4).status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
