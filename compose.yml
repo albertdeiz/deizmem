@@ -56,6 +56,12 @@ services:
       DM_MCP_HOST: 0.0.0.0
     ports:
       - "127.0.0.1:4319:4319"
+    networks:
+      default: {}
+      # Shared with Hermes and nothing else (daHouseLab ADR-0017). Created once:
+      #   docker network create --internal deizmem_mcp
+      deizmem_mcp:
+        aliases: [deizmem-mcp]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4319/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
       interval: 15s
@@ -126,3 +132,7 @@ services:
       timeout: 5s
       retries: 10
       start_period: 180s
+
+networks:
+  deizmem_mcp:
+    external: true
