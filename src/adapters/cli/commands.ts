@@ -4,6 +4,10 @@ import { capture } from '../../core/ops/capture';
 import { list, original, setHidden, setText, show } from '../../core/ops/memories';
 import { pending, PENDING_KINDS, type PendingKind } from '../../core/ops/pending';
 import { reprocess } from '../../core/ops/reprocess';
+import { archiveDomain, classify, createDomain, editDomain, listDomains, mergeDomains } from '../../core/ops/domains';
+import { archiveFactType, createFactType, editFactType, listFactTypes } from '../../core/facts/registry';
+import { putFacts, queryFacts } from '../../core/facts/facts';
+import { verify } from '../../core/ops/verify';
 import { listSessions, mintPairingCode, redeemPairingCode, revokeSession } from '../../core/ops/identity';
 import { serveHttp, serveStdio } from '../mcp/server';
 import { retrieve } from '../../core/ops/retrieve';
@@ -128,6 +132,63 @@ export const commands: Record<string, Command> = {
 
   async revoke(ctx) {
     return emit(ctx, await revokeSession(ctx.deps, await ctx.actor(), ctx.args[0] ?? ''));
+  },
+
+  /** dm domains [create <slug> --description .. | edit <slug> | archive <slug> | merge <a> <b>] [--yes] */
+  async domains(ctx) {
+    const [sub, a, b] = ctx.args;
+    const actor = await ctx.actor();
+    const yes = ctx.flags.yes === true;
+    if (sub === 'create') return emit(ctx, await createDomain(ctx.deps, actor, { slug: a ?? '', label: str(ctx.flags.label), description: str(ctx.flags.text) ?? '' }, yes));
+    if (sub === 'edit') return emit(ctx, await editDomain(ctx.deps, actor, a ?? '', { label: str(ctx.flags.label), description: str(ctx.flags.text) }, yes));
+    if (sub === 'archive') return emit(ctx, await archiveDomain(ctx.deps, actor, a ?? '', yes));
+    if (sub === 'merge') return emit(ctx, await mergeDomains(ctx.deps, actor, a ?? '', b ?? '', yes));
+    const v = await listDomains(ctx.deps, actor, ctx.flags.all === true);
+    return emit(ctx, { kind: 'ok', value: v }, (xs) => xs.map((d) =>
+      `${d.slug.padEnd(14)} ${String(d.memories).padStart(4)}  ${d.active ? '' : '(archived) '}${d.description}`).join('\n') || '(none)');
+  },
+
+  /** dm classify <id> <domain|-> [--title --occurred --by] */
+  async classify(ctx) {
+    const [id, domain] = ctx.args;
+    return emit(ctx, await classify(ctx.deps, await ctx.actor(), {
+      id: id ?? '', domain: domain && domain !== '-' ? domain : null, title: str(ctx.flags.title),
+      occurredAt: str(ctx.flags.occurred), by: str(ctx.flags.by) ?? 'cli',
+    }));
+  },
+
+  /** dm types [create <json|@file> | edit <slug> <json> | archive <slug>] [--yes] */
+  async types(ctx) {
+    const [sub, a, b] = ctx.args;
+    const actor = await ctx.actor();
+    const yes = ctx.flags.yes === true;
+    const json = async (s?: string) => JSON.parse(s?.startsWith('@') ? await readFile(s.slice(1), 'utf8') : s ?? '{}');
+    if (sub === 'create') return emit(ctx, await createFactType(ctx.deps, actor, await json(a), yes));
+    if (sub === 'edit') return emit(ctx, await editFactType(ctx.deps, actor, a ?? '', await json(b), yes));
+    if (sub === 'archive') return emit(ctx, await archiveFactType(ctx.deps, actor, a ?? '', yes));
+    const v = await listFactTypes(ctx.deps, actor, ctx.flags.all === true);
+    return emit(ctx, { kind: 'ok', value: v }, (xs) => xs.map((t) =>
+      `${t.slug.padEnd(20)} ${t.kind}/${t.cardinality}  [${t.fields.map((f) => `${f.name}:${f.kind}`).join(', ')}]${t.active ? '' : ' (archived)'}`).join('\n') || '(none)');
+  },
+
+  /** dm facts <type> [--identity --at --all]  ·  dm facts put <memory> <json|@file> [--by] */
+  async facts(ctx) {
+    const actor = await ctx.actor();
+    if (ctx.args[0] === 'put') {
+      const body = JSON.parse(ctx.args[2]?.startsWith('@') ? await readFile(ctx.args[2].slice(1), 'utf8') : ctx.args[2] ?? '{}');
+      return emit(ctx, await putFacts(ctx.deps, actor, { memoryId: ctx.args[1] ?? '', type: body.type, instances: body.instances ?? [], by: str(ctx.flags.by) ?? 'cli' }));
+    }
+    return emit(ctx, await queryFacts(ctx.deps, actor, {
+      type: ctx.args[0] ?? '', identity: str(ctx.flags.label), at: str(ctx.flags.to), history: ctx.flags.all === true,
+    }), (v) => v.facts.map((f) =>
+      `${f.status.padEnd(10)} ${f.identity.padEnd(14)} ${JSON.stringify(f.payload)}  ← ${f.memoryId.slice(0, 8)}`).join('\n') || '(none)');
+  },
+
+  /** dm verify "<text>" <memory ids...> */
+  async verify(ctx) {
+    const [text, ...ids] = ctx.args;
+    return emit(ctx, await verify(ctx.deps, await ctx.actor(), { text: text ?? '', memoryIds: ids }),
+      (v) => v.ok ? 'every figure is backed' : `not in the memories: ${v.missing.join(', ')}`);
   },
 
   /** The long-running job loop. */

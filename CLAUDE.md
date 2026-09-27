@@ -81,7 +81,10 @@ Es único por `(memory_id, type_id, identity)`.
 
 - **`estado`** tiene uno vigente: con el mismo tipo y la misma identidad, si las vigencias no
   se solapan, el posterior supera al anterior. Si se solapan, es un **conflicto** y se
-  muestran los dos.
+  muestran los dos. **Compartir el día de corte no es solaparse**: una póliza "01/03/2025
+  al 01/03/2026" seguida de otra desde el 01/03/2026 es una sucesión. Si falta `valid_until`,
+  también se lee como sucesión. La identidad se compara normalizada: `BP-9344586` y
+  `bp 9344586` son la misma.
 - **`periodo`** coexiste: la cartola de julio sigue siendo verdad sobre julio.
 - **`many`** exige `identity_field`. **Instancia no es tabla**: si la pregunta natural
   empieza con "cuánto en total", no es un tipo.
@@ -214,7 +217,7 @@ Se construye por tajadas, y cada una se prueba en el Pi antes de pasar a la sigu
 - [x] **S0** Esqueleto: compose, migraciones, `dm init`, `dm doctor`, sincronización al Pi
 - [x] **S1** Capturar, leer (inline y markitdown), trocear, buscar, `needs_text`
 - [x] **S2** MCP (HTTP y stdio), tokens, cola de trabajo
-- [ ] **S3** Dominios, clasificar, tipos, hechos con evidencia, `facts_query`, `verify`
+- [x] **S3** Dominios, clasificar, tipos, hechos con evidencia, `facts_query`, `verify`
 - [ ] **S4** Carril de embeddings (ONNX multilingüe) y reindexación automática
 - [ ] **S5** Carriles OCR y Whisper
 - [ ] **S6** Conectado a Hermes, con el `SKILL.md`
