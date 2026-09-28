@@ -34,8 +34,8 @@ export function registerTools(server: McpServer, deps: Deps, actor: Actor, cfg: 
     description: 'Store a file or a note. Returns at once; reading the file happens in the background. Send `text` when you already have the content (a transcript, a handwriting read) and lanes are skipped. `note` is the person\'s own words.',
     inputSchema: {
       content_base64: z.string().optional().describe('The file bytes, base64'),
-      filename: z.string().optional(),
-      media_type: z.string().optional(),
+      filename: z.string().optional().describe('Only with content_base64'),
+      media_type: z.string().optional().describe('Only with content_base64'),
       text: z.string().optional(),
       note: z.string().optional(),
       title: z.string().optional(),

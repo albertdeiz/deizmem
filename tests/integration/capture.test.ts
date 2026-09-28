@@ -48,6 +48,14 @@ describe('capture → read → index → retrieve', () => {
     expect(found.passages.every((p) => /patente|moto/i.test(p.content))).toBe(true);
   });
 
+  it('rejects a filename without the file, instead of storing it as ready', async () => {
+    for (const input of [{ filename: 'pasaje.pdf', text: 'la mitad del pasaje' }, { mediaType: 'application/pdf', note: 'pasaje' },
+      { bytes: Buffer.alloc(0), filename: 'vacio.pdf', note: 'pasaje' }]) {
+      const r = await cap(input);
+      expect(r.kind === 'err' && r.code).toBe('invalid');
+    }
+  });
+
   it('dedupes the same file for the same owner', async () => {
     const r = unwrap(await cap({ bytes: Buffer.from('%PDF-1.4 fake'), filename: 'otra.pdf' }));
     expect(r.deduped).toBe(true);

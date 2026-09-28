@@ -40,6 +40,11 @@ export async function capture(deps: Deps, actor: Actor, input: CaptureInput): Pr
   const text = input.text?.trim() || null;
   const note = input.note?.trim() || null;
   if (!bytes && !text && !note) return err('invalid', 'nothing to capture: send a file, text or a note');
+  // A name or a type without bytes describes a file that never arrived. Stored, it
+  // would pass for that file, half read, with no original to go back to.
+  if (!bytes && (input.filename?.trim() || input.mediaType?.trim())) {
+    return err('invalid', 'filename or media_type sent without the file: send its bytes, or drop them');
+  }
   if (bytes && bytes.length > input.maxBytes) {
     return err('too_large', `file is ${bytes.length} bytes; the limit is ${input.maxBytes}`);
   }
