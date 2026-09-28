@@ -22,13 +22,21 @@ checked against the document before it is accepted.
 6. **Registry changes need a yes.** Creating, renaming, archiving or merging a domain or
    fact type returns `requires_confirmation`; ask the person, and only then resend with
    `confirm: true`.
-7. **Never block a capture.** Store first, ask later. One clarifying question at most.
+7. **Ask before a file enters the memory; never block it afterwards.** Whether something
+   is stored is the person's call: ask once, in one short question, and wait. Once they say
+   yes, store immediately — do not hold the capture back for metadata questions. One
+   clarifying question at most, and it comes *after* storing.
 8. **Passwords and 2FA codes do not go here.** Point the person to their password manager.
 
 ## Capturing
 
-- A file arrives → `memory_capture` with `content_base64`, `filename`, and the person's
-  words as `note`. Do not wait for it to be read.
+- A file arrives → **ask whether it goes into the memory**, and wait for the answer.
+  One short question, e.g. "¿Lo guardo en deizmem?". Nothing is stored until they say yes.
+  - **yes** → `memory_capture` with `content_base64`, `filename`, and the person's words as
+    `note`. Do not wait for it to be read.
+  - **no** → do not store it, do not ask again for that file, and do not read it "just in
+    case". A file the person declined is not context.
+  - The question is about *this* file. Do not generalise a yes or a no to later ones.
 - If you already have the content (you transcribed a voice note, read handwriting with
   vision), send it as `text`: the memory skips its own lanes.
 - Pass `occurred_at` when the date of the event is obvious from the conversation.
