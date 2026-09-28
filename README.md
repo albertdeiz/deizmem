@@ -161,7 +161,8 @@ Ids are accepted in full or as a unique prefix of 6 or more characters.
 | `EMBED_MODEL` | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | changing it triggers a reindex |
 | `WHISPER_MODEL` | `base` | `small` transcribes better and takes about 3× longer |
 | `DM_MAX_UPLOAD_BYTES` | 25 MB | per-file limit |
-| `DM_UID` · `DM_GID` | `1000` | host owner of `./data` |
+| `DM_UID` · `DM_GID` | `1000` | host owner of the data directory |
+| `DEIZMEM_DATA` | `./data` | Where blobs, Postgres and the models live. Set it to keep state **outside** the checkout, so the repository stays disposable and re-cloning never risks the data (e.g. `/srv/deizmem` alongside `/opt/deizmem`). |
 
 ## Development
 

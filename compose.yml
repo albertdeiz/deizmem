@@ -11,7 +11,7 @@ x-app: &app
     DM_AUDIO_URL: ${DM_AUDIO_URL-http://whisper:8000}
     DM_EMBED_URL: ${DM_EMBED_URL-http://embed:8000}
   volumes:
-    - ./data/blobs:/data/blobs
+    - ${DEIZMEM_DATA:-./data}/blobs:/data/blobs
   depends_on:
     migrate:
       condition: service_completed_successfully
@@ -25,7 +25,7 @@ services:
       POSTGRES_PASSWORD: ${DM_DB_PASSWORD:-deizmem}
       POSTGRES_DB: deizmem
     volumes:
-      - ./data/pg:/var/lib/postgresql/data
+      - ${DEIZMEM_DATA:-./data}/pg:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U deizmem -d deizmem"]
       interval: 5s
@@ -85,7 +85,7 @@ services:
     build: services/embed
     image: deizmem-embed:local
     restart: unless-stopped
-    # Same uid as the host user that owns ./data, like the app containers.
+    # Same uid as the host user that owns the data directory, like the app containers.
     user: "${DM_UID:-1000}:${DM_GID:-1000}"
     environment:
       HOME: /tmp
@@ -93,7 +93,7 @@ services:
       EMBED_MODEL: ${EMBED_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
       EMBED_THREADS: ${EMBED_THREADS:-2}
     volumes:
-      - ./data/models:/models
+      - ${DEIZMEM_DATA:-./data}/models:/models
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=4).status==200 else 1)"]
       interval: 15s
@@ -125,7 +125,7 @@ services:
       WHISPER_MODEL: ${WHISPER_MODEL:-base}
       WHISPER_CACHE: /models/whisper
     volumes:
-      - ./data/models:/models
+      - ${DEIZMEM_DATA:-./data}/models:/models
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=4).status==200 else 1)"]
       interval: 15s
