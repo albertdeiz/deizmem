@@ -195,7 +195,8 @@ Persona ─► Agente (Hermes · OpenClaw) ─► su LLM
 - **RAM medida en el Pi 4 en reposo:** embed ~650 MB (MiniLM multilingüe en ONNX), documents
   ~100 MB, postgres ~35 MB, worker y mcp ~25 MB cada uno.
 - **Todo se construye en el Pi, para arm64.** El código se edita en el Mac, se sincroniza
-  (`scripts/pi.sh`) y se levanta con compose en `~/Dev/deizmem` del Pi.
+  (`scripts/pi.sh`) y se levanta con compose en `/opt/deizmem` del Pi. Los datos viven fuera
+  del checkout, en `/srv/deizmem` (`DEIZMEM_DATA` en el `.env` de `/opt/deizmem`).
 
 ## 9. Identidad
 
@@ -263,7 +264,8 @@ proveedor.
 ## 12. Cómo se trabaja
 
 - `npm test`: unit e integración contra un Postgres en Docker local.
-- `scripts/pi.sh up`: rsync al Pi, más `docker compose up -d --build`.
+- `scripts/pi.sh up`: rsync al Pi, más `docker compose up -d --build`. Se niega si el
+  destino no tiene `.env` o si el stack en marcha salió de otro directorio.
 - `scripts/pi.sh dm <args>`: corre el CLI dentro del contenedor del Pi.
 - En el Pi: SD con poco espacio. Antes de sumar una imagen, `docker system df`.
 - Commits pequeños por tajada. No se pushea a ningún remoto sin preguntar.

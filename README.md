@@ -78,14 +78,18 @@ first start, `embed` and `whisper` download their models into `data/models`.
 `scripts/pi.sh` syncs the repo over rsync and drives compose on the Pi:
 
 ```bash
-export DM_PI=user@my-pi          # plus DM_PI_DIR if it isn't Dev/deizmem
+export DM_PI=user@my-pi          # plus DM_PI_DIR if it isn't /opt/deizmem
 scripts/pi.sh up                 # sync and start
 scripts/pi.sh dm doctor          # any CLI command
 scripts/pi.sh push ~/policy.pdf  # capture a local file
 scripts/pi.sh logs worker
 ```
 
-Images are built on the Pi, so they come out native arm64.
+Images are built on the Pi, so they come out native arm64. The target directory needs its
+own `.env` (with `DEIZMEM_DATA` pointing outside the checkout), and `pi.sh` refuses to sync
+to a directory other than the one the running stack came from: two checkouts share the
+compose project name, so starting the wrong one recreates the live containers on an empty
+database.
 
 ## Connecting an agent
 
