@@ -1,6 +1,7 @@
 /**
  * Paragraph-aware chunking. A chunk is what gets searched and what gets cited.
- * Sizes carried over from deiz-memory, where they were measured on real policies.
+ * Sizes chosen for insurance-policy-length documents: a chunk small enough to cite,
+ * big enough to keep a clause together.
  */
 export const TARGET_CHARS = 900;
 const OVERLAP_CHARS = 150;

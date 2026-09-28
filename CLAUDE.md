@@ -6,9 +6,7 @@ la usa (Hermes Agent, OpenClaw o el que sea) por MCP.
 
 **Frase de una línea:** _el agente piensa, la memoria recuerda y verifica._
 
-Proyecto nuevo, empezado de cero el 2026-09-27. Su antecesor es `~/Dev/deiz-memory`: de ahí
-viene el diseño, y su CLAUDE.md guarda las mediciones que lo justifican. Este documento
-describe **lo que está decidido**. §11 dice qué está construido.
+Este documento describe **lo que está decidido**. §11 dice qué está construido y qué falta.
 
 ---
 
@@ -236,7 +234,31 @@ Se construye por tajadas, y cada una se prueba en el Pi antes de pasar a la sigu
 - [x] **S3** Dominios, clasificar, tipos, hechos con evidencia, `facts_query`, `verify`
 - [x] **S4** Carril de embeddings (ONNX multilingüe) y reindexación automática
 - [x] **S5** Carriles OCR y Whisper
-- [ ] **S6** Conectado a Hermes, con el `SKILL.md`
+- [~] **S6** Conectado a Hermes, con el `SKILL.md` — preparado, falta el paso del operador
+
+**Cómo queda conectado a Hermes.** Hermes corre en el mismo Pi (stack de daHouseLab, ADR-0017
+y runbook `connect-hermes-to-deizmem` en ese repo). Se alcanzan por la red Docker
+`deizmem_mcp`, creada `--internal`, donde el servicio `mcp` responde como `deizmem-mcp`. Desde
+esa red no se ve Postgres ni internet: está verificado. La red ya existe y `mcp` ya está
+unido a ella.
+
+Lo que falta lo hace el operador, porque maneja secretos:
+1. Push y pull de daHouseLab.
+2. `dm pair` y `dm token <code> --label hermes`.
+3. `DEIZMEM_MCP_TOKEN` en el `.env.service` de Hermes.
+4. El bloque `mcp_servers.deizmem` en `config.yaml`, con `Bearer ${DEIZMEM_MCP_TOKEN}` y nunca
+   el token en claro.
+5. Copiar `skills/deizmem/SKILL.md` y recrear Hermes.
+
+El interruptor para cortar el acceso es `dm revoke <session>`.
+
+Hermes usa un LLM de NVIDIA en la nube. Todo documento que el agente lea sale a ese
+proveedor.
+
+**Pendiente después de S6:**
+- Una semana de uso real con Hermes como único canal.
+- Respaldo off-site: todavía no existe. Los datos viven solo en la SD del Pi.
+- `purge` y un espejo legible, si hacen falta.
 
 ## 12. Cómo se trabaja
 

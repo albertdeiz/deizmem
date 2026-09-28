@@ -53,7 +53,7 @@ type Row = {
 /**
  * Hybrid retrieval over chunks. Matches with OR (a question is not an AND), but
  * ranks only with the rare terms, the threshold relative to the rarest term of
- * the question itself — measured in deiz-memory, where ranking with every term
+ * the question itself — ranking with every term, the words that only name the
  * pushed the only chunk carrying the figure to seventh place.
  */
 export async function retrieve(deps: Deps, actor: Actor, input: RetrieveInput): Promise<Result<RetrieveResult>> {
