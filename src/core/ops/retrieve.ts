@@ -53,8 +53,10 @@ type Row = {
 /**
  * Hybrid retrieval over chunks. Matches with OR (a question is not an AND), but
  * ranks only with the rare terms, the threshold relative to the rarest term of
- * the question itself — ranking with every term, the words that only name the
- * pushed the only chunk carrying the figure to seventh place.
+ * the question itself. Ranking with every term lets the words that only name the
+ * document ("insurance", "vehicle": on every page of a policy) tie with the one
+ * chunk that carries the figure, which then sinks below chunks that merely
+ * mention the topic.
  */
 export async function retrieve(deps: Deps, actor: Actor, input: RetrieveInput): Promise<Result<RetrieveResult>> {
   const terms = termsOf(input.query ?? '', input.terms ?? []);
