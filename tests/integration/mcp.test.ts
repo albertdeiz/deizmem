@@ -29,7 +29,7 @@ const call = async (c: Client, name: string, args: Record<string, unknown>) => {
 
 beforeAll(async () => {
   s = await stack();
-  const cfg = { ...loadConfig({}), mcpHost: '127.0.0.1', mcpPort: 0 };
+  const cfg = { ...loadConfig({}), mcpHost: '127.0.0.1', mcpPort: 0, maxUploadBytes: 64 * 1024 };
   http = serveHttp(s.deps, cfg, () => {});
   await new Promise((r) => http.once('listening', r));
   const addr = http.address();
@@ -85,6 +85,32 @@ describe('MCP', () => {
     const o = await call(c, 'memory_original', { id: cap.data.id });
     expect(Buffer.from(o.data.content_base64, 'base64').equals(bytes)).toBe(true);
     await c.close();
+  });
+
+  it('captures raw bytes through POST /capture, with the same answer as the tool', async () => {
+    const bytes = Buffer.from('%PDF-1.4 pasaje\n' + 'x'.repeat(40_000));
+    const up = (token: string | null, query: string, body: Buffer = bytes) => fetch(`${base}/capture?${query}`, {
+      method: 'POST', body: new Uint8Array(body), headers: token ? { authorization: `Bearer ${token}` } : {} });
+
+    expect((await up(null, 'filename=pasaje.pdf')).status).toBe(401);
+    const r = await up(tokenA, `filename=pasaje.pdf&note=${encodeURIComponent('pasaje a Puerto Montt')}&tag=viaje&tag=bus`);
+    expect(r.status).toBe(200);
+    const cap = await r.json();
+    expect(cap).toMatchObject({ status: 'pending', deduped: false, mediaType: 'application/pdf' });
+
+    const c = await client(tokenA);
+    const o = await call(c, 'memory_original', { id: cap.id });
+    expect(Buffer.from(o.data.content_base64, 'base64').equals(bytes)).toBe(true);
+    const g = await call(c, 'memory_get', { id: cap.id });
+    expect(g.data).toMatchObject({ filename: 'pasaje.pdf', note: 'pasaje a Puerto Montt', tags: ['viaje', 'bus'] });
+    await c.close();
+
+    expect((await (await up(tokenA, 'filename=otra.pdf')).json()).deduped).toBe(true);
+    const bad = await up(tokenA, 'occurred_at=ayer');
+    expect(bad.status).toBe(400);
+    expect((await bad.json()).code).toBe('invalid');
+    expect((await up(tokenA, 'filename=vacio.pdf', Buffer.alloc(0))).status).toBe(400);
+    expect((await up(tokenA, 'filename=grande.bin', Buffer.alloc(65 * 1024))).status).toBe(413);
   });
 
   it('isolates owners by token', async () => {

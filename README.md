@@ -136,6 +136,15 @@ To cut access: `dm sessions`, then `dm revoke <id>`.
 | `verify` | figures in an answer that are not in what was read |
 | `domain_*` · `fact_type_*` | change the registry; require `confirm: true` |
 
+A file too big to pass as base64 goes as raw bytes to `POST /capture`, next to `/mcp` and with
+the same token; metadata goes in the query (`filename`, `media_type`, `note`, `title`,
+`occurred_at`, `tag`), and the answer is the one `memory_capture` gives:
+
+```bash
+curl --data-binary @policy.pdf -H "Authorization: Bearer $DEIZMEM_MCP_TOKEN" \
+  "http://127.0.0.1:4319/capture?filename=policy.pdf&note=car%20insurance"
+```
+
 No tool takes an owner: it comes from the token. There is no `purge` and no maintenance over
 MCP.
 

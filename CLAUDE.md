@@ -114,6 +114,14 @@ fact_type_create · fact_type_edit · fact_type_archive
 - **El contrato** (reglas duras 1-6 y 10) viaja en el `instructions` del servidor y en
   `skills/deizmem/SKILL.md`.
 
+**Un archivo grande entra por `POST /capture`**, junto a `/mcp` y con el mismo `Bearer`. El
+cuerpo son los bytes crudos, y `filename`, `media_type`, `note`, `title`, `occurred_at` y
+`tag` van en la query. Llama a la misma operación que `memory_capture` y responde lo mismo.
+Existe porque un modelo no puede copiar un archivo en base64 sin corromperlo: con esto, los
+bytes van del disco del agente a la memoria sin pasar por su contexto. **No hay ruta ni
+URL**: el servidor no ve el disco del agente, leer el suyo le abriría ese disco al agente, y
+descargar una URL sacaría a la memoria del host.
+
 **`pending_list`** es la cola de trabajo del agente: `needs_text` · `unclassified` ·
 `unextracted` (tiene texto pero `facts_checked_at` es null) · `review`.
 

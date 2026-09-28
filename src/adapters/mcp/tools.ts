@@ -31,7 +31,7 @@ export function registerTools(server: McpServer, deps: Deps, actor: Actor, cfg: 
   const tool = server.registerTool.bind(server);
 
   tool('memory_capture', {
-    description: 'Store a file or a note. Returns at once; reading the file happens in the background. Send `text` when you already have the content (a transcript, a handwriting read) and lanes are skipped. `note` is the person\'s own words.',
+    description: 'Store a file or a note. Returns at once; reading the file happens in the background. Send `text` when you already have the content (a transcript, a handwriting read) and lanes are skipped. `note` is the person\'s own words. For a file you cannot copy exactly as base64 (anything beyond a few KB), POST its raw bytes to /capture next to this /mcp endpoint, with the same Bearer and filename, note, title, occurred_at, tag in the query.',
     inputSchema: {
       content_base64: z.string().optional().describe('The file bytes, base64'),
       filename: z.string().optional().describe('Only with content_base64'),

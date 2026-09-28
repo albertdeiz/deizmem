@@ -34,6 +34,11 @@ checked against the document before it is accepted.
   One short question, e.g. "¿Lo guardo en deizmem?". Nothing is stored until they say yes.
   - **yes** → `memory_capture` with `content_base64`, `filename`, and the person's words as
     `note`. Do not wait for it to be read.
+  - **A file beyond a few KB** does not go through `content_base64`: you cannot copy it
+    exactly. If you can run a command, send the bytes from disk to `POST /capture`, next to
+    the `/mcp` endpoint and with the same token:
+    `curl --data-binary @file -H "Authorization: Bearer $TOKEN" "<base>/capture?filename=…&note=…"`.
+    It answers like `memory_capture`. Never send a `filename` without the file: it is rejected.
   - **no** → do not store it, do not ask again for that file, and do not read it "just in
     case". A file the person declined is not context.
   - The question is about *this* file. Do not generalise a yes or a no to later ones.
