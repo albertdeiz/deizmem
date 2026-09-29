@@ -268,8 +268,7 @@ Se construye por tajadas, y cada una se prueba en el Pi antes de pasar a la sigu
 - [x] **S4** Carril de embeddings (ONNX multilingüe) y reindexación automática
 - [x] **S5** Carriles OCR y Whisper
 - [~] **S6** Conectado a Hermes, con el `SKILL.md` — preparado, falta el paso del operador
-- [~] **S7** Web de la persona (Express y React) — desplegada en el Pi y con la API probada
-  contra datos reales; falta usarla en un navegador con sesión
+- [x] **S7** Web de la persona (Express y React), en `127.0.0.1:4320` del Pi
 
 **Cómo queda conectado a Hermes.** Hermes corre en el mismo Pi (stack de daHouseLab, ADR-0017
 y runbook `connect-hermes-to-deizmem` en ese repo). Se alcanzan por la red Docker
