@@ -94,7 +94,7 @@ Es único por `(memory_id, type_id, identity)`.
 ## 5. Operaciones e interfaz
 
 Toda operación es `(deps, actor, input) → Result<T>`. Hay tres adapters sin lógica de
-negocio: **MCP** (el agente), **CLI** (el operador) y, más adelante, una API para una web.
+negocio: **MCP** (el agente), **CLI** (el operador) y **web** (la persona).
 
 **MCP es la interfaz del agente**, y no el CLI, porque un agente con el CLI necesita shell,
 y el CLI trae `purge`. Herramientas:
@@ -124,6 +124,21 @@ descargar una URL sacaría a la memoria del host.
 
 **`pending_list`** es la cola de trabajo del agente: `needs_text` · `unclassified` ·
 `unextracted` (tiene texto pero `facts_checked_at` es null) · `review`.
+
+**La web es la ventana de la persona** sobre su memoria: `dm web`, un servidor Express que
+sirve una página React y una API JSON bajo `/api`. Llama a las mismas operaciones que MCP.
+
+- **Qué hace:** listar y buscar, ver una memoria con su nota, su texto, su original y sus
+  hechos (con el estado antes del valor), capturar un archivo o una nota, ocultar, clasificar,
+  escribir el texto de una `needs_text`, ver la cola, preguntar (`retrieve`), ver dominios y
+  tipos, y revocar sesiones.
+- **Qué no hace:** lo mismo que MCP no expone. Sin `purge`, `reprocess` ni `pair`: una sesión
+  web robada no puede acuñar accesos nuevos. Dominios y tipos son de solo lectura; cambiarlos
+  sigue pasando por el agente con `confirm: true`.
+- **Lo que decide la persona lleva `by: "person/web"`**, y clasificar desde la web la saca de
+  `review`. La captura se guarda con `source = 'web'`.
+- **Un original solo se abre en la página si es inerte** (imagen, PDF, audio, video, texto
+  plano). HTML, SVG y el resto se descargan, siempre con una CSP `sandbox`.
 
 ## 6. Verificar sin idioma
 
@@ -178,16 +193,19 @@ mezclan.**
 
 ```
 Persona ─► Agente (Hermes · OpenClaw) ─► su LLM
-                │ MCP (HTTP streamable · stdio)
-                ▼
-   deizmem: mcp · cli │ core │ worker (jobs en Postgres)
+   │            │ MCP (HTTP streamable · stdio)
+   │ web        ▼
+   └──► deizmem: mcp · web · cli │ core │ worker (jobs en Postgres)
                 ▼                  ▼
    Postgres 17 + pgvector    blobs en disco (sha256)
                 ▲
    carriles opcionales por URL: documents · ocr · whisper · embed
 ```
 
-- **Un monolito**, un solo artefacto. `dm mcp`, `dm worker` y el CLI son el mismo binario.
+- **Un monolito**, un solo artefacto. `dm mcp`, `dm web`, `dm worker` y el CLI son el mismo
+  binario. La imagen lleva además el bundle de la web en `/app/web` (`DM_WEB_ROOT`).
+- **La web escucha en `127.0.0.1:4320`** del Pi y **no está en la red `deizmem_mcp`**: el
+  agente tiene MCP, no necesita la web. Se llega con un túnel SSH, como a `mcp`.
 - **Los blobs van a disco**, en `blobs/<aa>/<bb>/<sha256>`, detrás del puerto `BlobStore`.
   Pasar a S3 es cambiar de adapter.
 - **La cola es una tabla** (`jobs`, con `for update skip locked`). Sin Redis ni pg-boss.
@@ -212,6 +230,12 @@ Sin cuentas ni contraseñas. `dm pair --mcp` acuña un código de 15 minutos. `d
 lo canjea por un token con expiración y revocación, y el agente lo usa como `Bearer`. Un
 agente que atiende a varias personas necesita un token por persona. El CLI elige el dueño con
 `--actor`, o toma el único que exista.
+
+**La web usa el mismo pairing.** La persona pega en la página un código de `dm pair`, y la
+web lo canjea por un token que guarda en una cookie `HttpOnly` y `SameSite=Strict`. Es una
+sesión más: aparece en `dm sessions`, `dm revoke` la corta, y "Salir" la revoca. Toda
+escritura exige el encabezado `x-dm-web: 1` y el mismo origen, y la sesión se comprueba antes
+de leer el cuerpo.
 
 ## 10. Reglas duras
 
@@ -244,6 +268,8 @@ Se construye por tajadas, y cada una se prueba en el Pi antes de pasar a la sigu
 - [x] **S4** Carril de embeddings (ONNX multilingüe) y reindexación automática
 - [x] **S5** Carriles OCR y Whisper
 - [~] **S6** Conectado a Hermes, con el `SKILL.md` — preparado, falta el paso del operador
+- [~] **S7** Web de la persona (Express y React) — desplegada en el Pi y con la API probada
+  contra datos reales; falta usarla en un navegador con sesión
 
 **Cómo queda conectado a Hermes.** Hermes corre en el mismo Pi (stack de daHouseLab, ADR-0017
 y runbook `connect-hermes-to-deizmem` en ese repo). Se alcanzan por la red Docker

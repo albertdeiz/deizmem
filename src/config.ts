@@ -9,6 +9,10 @@ export interface Config {
   embedUrl: string | null;
   mcpHost: string;
   mcpPort: number;
+  webHost: string;
+  webPort: number;
+  /** The built React bundle (npm run build:web). */
+  webRoot: string;
   maxUploadBytes: number;
 }
 
@@ -25,6 +29,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     embedUrl: opt(env.DM_EMBED_URL),
     mcpHost: env.DM_MCP_HOST ?? '127.0.0.1',
     mcpPort: Number(env.DM_MCP_PORT ?? 4319),
+    webHost: env.DM_WEB_HOST ?? '127.0.0.1',
+    webPort: Number(env.DM_WEB_PORT ?? 4320),
+    webRoot: env.DM_WEB_ROOT ?? './dist/web',
     maxUploadBytes: Number(env.DM_MAX_UPLOAD_BYTES ?? 25 * 1024 * 1024),
   };
 }

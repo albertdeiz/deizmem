@@ -59,6 +59,11 @@ export async function actorForToken(deps: Deps, token: string | null | undefined
   return r.rows[0] ? { ownerId: r.rows[0].owner_id } : null;
 }
 
+/** Ends the session a token belongs to: the web's log out. Idempotent. */
+export async function revokeToken(deps: Deps, token: string): Promise<void> {
+  await deps.db.query('update sessions set revoked_at = now() where token_hash = $1 and revoked_at is null', [hash(token.trim())]);
+}
+
 export interface SessionSummary {
   id: string; channel: string; label: string | null; createdAt: string; expiresAt: string;
   lastUsedAt: string | null; revoked: boolean;

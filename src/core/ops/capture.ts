@@ -5,7 +5,7 @@ import type { Actor, Deps } from '../ports';
 import { err, ok, type Result } from '../result';
 
 export interface CaptureInput {
-  source: 'mcp' | 'cli';
+  source: 'mcp' | 'cli' | 'web';
   bytes?: Buffer | null;
   filename?: string | null;
   mediaType?: string | null;

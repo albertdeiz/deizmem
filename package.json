@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "scripts": {
     "test": "vitest run",
-    "build": "esbuild src/adapters/cli/main.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/dm.js --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
+    "build": "npm run build:cli && npm run build:web",
+    "build:cli": "esbuild src/adapters/cli/main.ts --bundle --platform=node --format=esm --target=node22 --outfile=dist/dm.js --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
+    "build:web": "esbuild src/adapters/web/ui/main.tsx --bundle --minify --format=esm --target=es2022 --jsx=automatic --define:process.env.NODE_ENV='\"production\"' --outfile=dist/web/app.js && cp src/adapters/web/ui/index.html dist/web/index.html",
     "typecheck": "tsc",
     "dm": "tsx src/adapters/cli/main.ts",
     "pi": "scripts/pi.sh"
@@ -12,12 +14,18 @@
   "private": true,
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.1",
+    "express": "^5.2.1",
     "pg": "^8.23.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^26.6.3",
     "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",

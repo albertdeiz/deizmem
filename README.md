@@ -34,9 +34,9 @@ how to run it.
 
 ```
 Person ─► Agent ─► its LLM
-            │ MCP (streamable HTTP or stdio, one token per owner)
-            ▼
-   deizmem: mcp · worker · cli
+  │         │ MCP (streamable HTTP or stdio, one token per owner)
+  │ web     ▼
+  └──► deizmem: mcp · web · worker · cli
             │
    Postgres 17 + pgvector      blobs on disk (sha256)
             ▲
@@ -53,6 +53,7 @@ disk.
 | `migrate` | applies migrations and creates the first owner, then exits |
 | `worker` | reads files, chunks, embeds and reindexes |
 | `mcp` | the agent's interface, at `127.0.0.1:4319/mcp` |
+| `web` | the person's page, at `127.0.0.1:4320` |
 | `documents` | markitdown |
 | `ocr` | RapidOCR on ONNX Runtime |
 | `whisper` | faster-whisper (`base` by default) |
@@ -148,10 +149,36 @@ curl --data-binary @policy.pdf -H "Authorization: Bearer $DEIZMEM_MCP_TOKEN" \
 No tool takes an owner: it comes from the token. There is no `purge` and no maintenance over
 MCP.
 
+## The web
+
+A page for the person: browse and search memories, open the original, see the facts and
+their status, capture a file or a note, hide, classify, type the text of a `needs_text`
+memory, see the work queue, ask a question, and revoke sessions. It has no `purge`, no
+`reprocess` and no `pair`, and categories and fact types are read-only there: they change
+through the agent, with the person's confirmation.
+
+It listens on the Pi's loopback only. From another machine:
+
+```bash
+ssh -fNL 4320:127.0.0.1:4320 user@my-pi   # then open http://127.0.0.1:4320
+scripts/pi.sh dm pair                     # a one-use code, 15 minutes
+```
+
+On the Pi itself, the same code comes from
+`docker compose exec worker node /app/dm.js pair`.
+
+Paste the code in the page. It becomes a session like an agent's: it shows in `dm sessions`,
+`dm revoke` cuts it, and "Salir" (log out) revokes it. The token lives in an `HttpOnly`,
+`SameSite=Strict` cookie, and every write needs the `x-dm-web: 1` header, so another site
+cannot write through your browser. A stored original opens in the page only when it is inert
+(image, PDF, audio, video, plain text); HTML, SVG and the rest are downloaded.
+
+The page is in Spanish. The server is Express; the page is React, bundled by esbuild.
+
 ## CLI
 
 ```
-dm init · doctor · migrate · owners · worker · mcp [--stdio]
+dm init · doctor · migrate · owners · worker · mcp [--stdio] · web
 dm capture <file> | --text "…" | -   [--note --title --occurred --filename --wait]
 dm ls [query] · search <question> · show <id> · open <id> · hide · unhide · text <id> "<text>"
 dm pending [kind] · reprocess [--status … | --all | --by <agent>]
@@ -174,6 +201,8 @@ Ids are accepted in full or as a unique prefix of 6 or more characters.
 | `EMBED_MODEL` | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | changing it triggers a reindex |
 | `WHISPER_MODEL` | `base` | `small` transcribes better and takes about 3× longer |
 | `DM_MAX_UPLOAD_BYTES` | 25 MB | per-file limit |
+| `DM_WEB_PORT` | `4320` | the web's port (`DM_WEB_HOST`, default `127.0.0.1`) |
+| `DM_WEB_ROOT` | `./dist/web` | the built page; `/app/web` in the image |
 | `DM_UID` · `DM_GID` | `1000` | host owner of the data directory |
 | `DEIZMEM_DATA` | `./data` | Where blobs, Postgres and the models live. Set it to keep state **outside** the checkout, so the repository stays disposable and re-cloning never risks the data (e.g. `/srv/deizmem` alongside `/opt/deizmem`). |
 
@@ -184,11 +213,12 @@ npm install
 scripts/test-db.sh      # throwaway Postgres on 127.0.0.1:55432
 npm test                # unit + integration
 npm run typecheck
-npm run build           # dist/dm.js, a single file
+npm run build           # dist/dm.js (one file) and dist/web (the page)
 ```
 
-The code is TypeScript. Operations live in `src/core` and import nothing concrete; MCP and the
-CLI are adapters in `src/adapters`. The lanes are Python services in `services/`. Migrations
+The code is TypeScript. Operations live in `src/core` and import nothing concrete; MCP, the
+CLI and the web are adapters in `src/adapters`. The page is in `src/adapters/web/ui` and
+imports the core's types, so the server and the page cannot drift. The lanes are Python services in `services/`. Migrations
 are in `migrations/`.
 
 ## Limitations

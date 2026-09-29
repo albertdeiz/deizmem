@@ -11,6 +11,7 @@ import { verify } from '../../core/ops/verify';
 import { spaceStatus, syncSpaces } from '../../core/ops/embeddings';
 import { listSessions, mintPairingCode, redeemPairingCode, revokeSession } from '../../core/ops/identity';
 import { serveHttp, serveStdio } from '../mcp/server';
+import { serveWeb } from '../web/server';
 import { retrieve } from '../../core/ops/retrieve';
 import { drain, work } from '../../core/worker';
 import { emit, type Command } from './io';
@@ -110,6 +111,13 @@ export const commands: Record<string, Command> = {
     } else {
       serveHttp(ctx.deps, ctx.cfg, (s) => console.log(`${new Date().toISOString()} ${s}`));
     }
+    await new Promise(() => {}); // runs until killed
+    return 0;
+  },
+
+  /** dm web: the person's page. Loopback only; reach it through a tunnel. */
+  async web(ctx) {
+    serveWeb(ctx.deps, ctx.cfg, (s) => console.log(`${new Date().toISOString()} ${s}`));
     await new Promise(() => {}); // runs until killed
     return 0;
   },

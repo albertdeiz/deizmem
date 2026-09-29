@@ -68,6 +68,22 @@ services:
       timeout: 5s
       retries: 5
 
+  # The person's page. Loopback only, like mcp, and deliberately off the
+  # deizmem_mcp network: the agent has MCP, it does not need the web.
+  web:
+    <<: *app
+    command: ["web"]
+    environment:
+      <<: *app-env
+      DM_WEB_HOST: 0.0.0.0
+    ports:
+      - "127.0.0.1:4320:4320"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4320/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
   documents:
     build: services/documents
     image: deizmem-documents:local
