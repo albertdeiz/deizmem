@@ -286,6 +286,12 @@ Lo que falta lo hace el operador, porque maneja secretos:
 
 El interruptor para cortar el acceso es `dm revoke <session>`.
 
+**Reiniciar la base borra también las sesiones**, y con ellas el token de cada agente. Hermes
+no lo dice claro: `/reload-mcp` informa "reconnected" y después "No MCP tools available",
+mientras el log de `mcp` se llena de `401` desde su IP. Después de un reinicio, se repiten los
+pasos 2, 3 y 5 (acuñar un token nuevo, ponerlo en `.env.service` y recrear Hermes), y lo mismo
+con cada agente y navegador. `dm sessions` muestra quién quedó conectado.
+
 Hermes usa un LLM de NVIDIA en la nube. Todo documento que el agente lea sale a ese
 proveedor.
 
