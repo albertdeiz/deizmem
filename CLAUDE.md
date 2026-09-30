@@ -61,7 +61,7 @@ Este documento describe **lo que está decidido**. §11 dice qué está construi
 `normalized_text` (lo que sacó un carril o puso el agente) · `lane`
 (`inline | document | vision | audio | agent`) · `status` · `domain_id` ·
 `domain_confidence` · `classified_by` · `needs_review` · `title` · `tags` ·
-`facts_checked_at` · `hidden`.
+`facts_checked_at` · `hidden` · `password_protected` (se leyó con contraseña).
 
 `status`: `pending` (se está leyendo) → `ready` (tiene texto) · `needs_text` (ningún carril
 pudo leerla, y espera al agente) · `failed`.
@@ -101,7 +101,7 @@ y el CLI trae `purge`. Herramientas:
 
 ```
 memory_capture   memory_search    memory_retrieve  memory_get      memory_original
-memory_set_text  memory_classify  memory_hide      pending_list
+memory_set_text  memory_classify  memory_hide      memory_unlock   pending_list
 facts_put        facts_query      fact_types_list  domains_list    verify
 domain_create · domain_edit · domain_archive · domain_merge
 fact_type_create · fact_type_edit · fact_type_archive
@@ -131,6 +131,23 @@ el agente monta para dejar archivos. La ruta tiene que ser absoluta, se resuelve
 y respeta el mismo límite de tamaño. Con `DM_CAPTURE_DIRS` vacío, `path` responde
 `forbidden`. **El servidor nunca lee fuera de ese directorio**, y una URL sigue sin existir.
 
+**Un PDF con contraseña se lee con `password`, y la contraseña no se guarda.** Sin ella, los
+carriles responden `password_required` y la memoria queda en `needs_text` con ese motivo.
+`memory_capture` acepta `password` (en `POST /capture` va en el encabezado `x-dm-password`,
+con percent-encoding, y nunca en la query), y `memory_unlock` abre una que ya está guardada.
+- **Se lee en la misma llamada, no en el worker.** Un job necesitaría la contraseña en la
+  tabla `jobs`, o sea, en Postgres. Es la única captura que espera a los carriles.
+- **Primero se guarda.** Con una contraseña equivocada (`wrong_password`) o con un carril
+  caído (`unavailable`), el archivo queda en `needs_text` y la respuesta trae `unlock` con el
+  motivo. Mandar el mismo archivo otra vez, ahora con la contraseña, sirve de reintento.
+- **Nunca sale de la llamada:** no va a una fila, a un log, a una respuesta ni a un error.
+  Los mensajes de los carriles se redactan antes de guardarlos o devolverlos.
+- **Lo que queda en claro es el texto**, como el de cualquier memoria: es lo que se busca.
+- **Un archivo leído con contraseña no se vuelve a leer sin ella.** `dm reprocess` lo
+  salta y conserva su texto. Leerlo otra vez es `memory_unlock` con la contraseña.
+- Solo PDF. Un Office cifrado sigue yendo a `needs_text`.
+- La persona puede escribir la contraseña en la web, y así no pasa por el LLM del agente.
+
 **Un argumento desconocido es un error.** Toda herramienta MCP valida su entrada estricta: el
 SDK, por defecto, descarta en silencio lo que no conoce y la llamada sigue con lo que queda,
 así que una captura con un parámetro mal escrito y una nota volvía `ready` guardando solo
@@ -144,10 +161,13 @@ sirve una página React y una API JSON bajo `/api`. Llama a las mismas operacion
 
 - **Qué hace:** listar y buscar, ver una memoria con su nota, su texto, su original y sus
   hechos (con el estado antes del valor), capturar un archivo o una nota, ocultar, clasificar,
-  escribir el texto de una `needs_text`, ver la cola, preguntar (`retrieve`), ver dominios y
-  tipos, y revocar sesiones.
-- **Qué no hace:** lo mismo que MCP no expone. Sin `purge`, `reprocess` ni `pair`: una sesión
-  web robada no puede acuñar accesos nuevos. Dominios y tipos son de solo lectura; cambiarlos
+  escribir el texto de una `needs_text`, abrir un PDF con su contraseña (al capturarlo o
+  después), volver a leer un archivo con los carriles, ver la cola, preguntar (`retrieve`),
+  ver dominios y tipos, y revocar sesiones.
+- **Volver a leer es de a una memoria**, y en segundo plano. No reemplaza un texto que puso el
+  agente o la persona (`lane = 'agent'`), ni uno leído con contraseña.
+- **Qué no hace:** lo mismo que MCP no expone. Sin `purge`, `reprocess` masivo ni `pair`: una
+  sesión web robada no puede acuñar accesos nuevos. Dominios y tipos son de solo lectura; cambiarlos
   sigue pasando por el agente con `confirm: true`.
 - **Lo que decide la persona lleva `by: "person/web"`**, y clasificar desde la web la saca de
   `review`. La captura se guarda con `source = 'web'`.

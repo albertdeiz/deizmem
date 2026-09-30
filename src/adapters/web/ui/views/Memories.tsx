@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api, qs, type FactHit, type Memory, type MemorySummary } from '../api';
 import { useApp } from '../context';
 import { Badge, Msg, Panel, Status, failed, type Flash } from '../kit';
-import { FACT_STATUS, LANE, STATUS, day, splitTags, titleOf, value, when } from '../words';
+import { FACT_STATUS, LANE, STATUS, day, isPdf, splitTags, titleOf, value, when } from '../words';
 
 interface Filters { query: string; domain: string; status: string; hidden: boolean }
 interface Page { items: MemorySummary[]; next: number | null }
@@ -147,6 +147,13 @@ function Detail({ id, onChanged }: { id: string; onChanged: () => void }) {
         <div className="actions">
           {m.sha256 ? <a href={original} target="_blank" rel="noopener"><button>Abrir original</button></a> : null}
           {m.sha256 ? <a href={`${original}?download=1`}><button>Descargar</button></a> : null}
+          {canReread(m) ? (
+            <button title="Pasa el archivo otra vez por los carriles: sirve si uno estaba apagado o falló"
+              onClick={async () => done(await api('POST', `/api/memories/${m.id}/reread`),
+                'Se vuelve a leer en segundo plano. Recarga en unos segundos.')}>
+              Volver a leer
+            </button>
+          ) : null}
           <button onClick={async () => done(await api('POST', `/api/memories/${m.id}/hide`, { hidden: !m.hidden }),
             m.hidden ? 'Visible de nuevo.' : 'Oculta. No se borró nada.')}>
             {m.hidden ? 'Mostrar' : 'Ocultar'}
@@ -156,6 +163,8 @@ function Detail({ id, onChanged }: { id: string; onChanged: () => void }) {
         {m.note ? <><h3>Nota</h3><div className="note">{m.note}</div></> : null}
         {preview ? <div className="preview">{preview}</div> : null}
       </Panel>
+
+      {canUnlock(m) ? <UnlockForm m={m} done={done} /> : null}
 
       <Panel title="Hechos">
         {m.facts.length ? m.facts.map((f) => <Fact key={f.id} f={f} />)
@@ -199,6 +208,41 @@ function Fact({ f }: { f: FactHit }) {
 }
 
 type Done = (r: Awaited<ReturnType<typeof api>>, ok: string) => Promise<void>;
+
+/** The same rules as the core's reread: a file the lanes read, not text someone wrote. */
+const canReread = (m: Memory) => !!m.sha256 && m.lane !== 'agent' && !m.passwordProtected && m.status !== 'pending';
+const canUnlock = (m: Memory) => !!m.sha256 && isPdf({ name: m.filename ?? '', type: m.mediaType })
+  && (m.status === 'needs_text' || m.status === 'failed' || (m.status === 'ready' && m.passwordProtected));
+
+/** The person types it here, so it never goes through the agent's LLM. */
+function UnlockForm({ m, done }: { m: Memory; done: Done }) {
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const again = m.status === 'ready';
+  return (
+    <Panel title={again ? 'Volver a leer con contraseña' : 'Abrir con contraseña'}>
+      <p className="muted">
+        {again ? 'Se leyó con una contraseña, que no se guardó. Para leerlo otra vez hace falta de nuevo.'
+          : 'Si el PDF tiene contraseña, escríbela aquí. Se usa una vez para leerlo y no se guarda.'}
+      </p>
+      <form onSubmit={async (e) => {
+        e.preventDefault();
+        if (!password) return;
+        setBusy(true);
+        const r = await api('POST', `/api/memories/${m.id}/unlock`, { password });
+        setBusy(false);
+        setPassword('');
+        await done(r, 'Leído. Se vuelve a indexar.');
+      }}>
+        <label>Contraseña</label>
+        <input type="password" autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <div className="actions">
+          <button className="primary" type="submit" disabled={busy || !password}>{busy ? 'Leyendo…' : 'Abrir'}</button>
+        </div>
+      </form>
+    </Panel>
+  );
+}
 
 function ClassifyForm({ m, done }: { m: Memory; done: Done }) {
   const { overview } = useApp();

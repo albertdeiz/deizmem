@@ -19,6 +19,7 @@ const ERRORS: Record<string, string> = {
   invalid: 'Hay un dato inválido', forbidden: 'No permitido', not_found: 'No existe', conflict: 'Conflicto',
   ambiguous: 'El id es ambiguo', too_large: 'El archivo es demasiado grande', unavailable: 'No disponible',
   unauthenticated: 'La sesión expiró', network: 'No se pudo conectar',
+  wrong_password: 'La contraseña no abrió el archivo',
 };
 
 export const errText = (e: ApiError) => `${ERRORS[e.code] ?? `Error ${e.status}`}${e.message ? `: ${e.message}` : ''}`;
@@ -39,4 +40,8 @@ export function value(v: unknown): string {
   }
   return v === null || v === undefined ? '' : String(v);
 }
+export const isPdf = (f: { name?: string; type?: string | null }) =>
+  f.type === 'application/pdf' || /\.pdf$/i.test(f.name ?? '');
+/** A password travels percent-encoded: a header is Latin-1 and a password may not be. */
+export const passwordHeader = (pw: string): Record<string, string> => (pw ? { 'x-dm-password': encodeURIComponent(pw) } : {});
 export const splitTags = (s: string) => s.split(',').map((t) => t.trim()).filter(Boolean);

@@ -13,6 +13,7 @@ export interface ReprocessInput {
 /**
  * What a lane produced is recomputed from the blob; what an agent decided is
  * re-queued for the agent, never recomputed — the memory has no model to do it (§3.6).
+ * A file read with a password is skipped: without it, re-reading can only lose its text.
  */
 export async function reprocess(deps: Deps, actor: Actor, input: ReprocessInput): Promise<Result<{ normalize: number; requeued: number }>> {
   let requeued = 0;
@@ -29,7 +30,7 @@ export async function reprocess(deps: Deps, actor: Actor, input: ReprocessInput)
   const statuses = input.status ?? ['needs_text', 'failed'];
   const ids = await deps.db.query<{ id: string }>(
     `select id from memories where owner_id = $1 and blob_sha256 is not null
-        and ($2 or status = any($3::text[])) and lane is distinct from 'agent'`,
+        and ($2 or status = any($3::text[])) and lane is distinct from 'agent' and not password_protected`,
     [actor.ownerId, input.all ?? false, statuses]);
   await deps.db.tx(async (db) => {
     for (const { id } of ids.rows) {

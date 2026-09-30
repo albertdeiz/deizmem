@@ -29,9 +29,10 @@ const health = (service: string, base: string) => async (): Promise<LaneHealth> 
  */
 export function httpConverter(service: string, base: string, timeoutMs: number): Converter {
   return {
-    async extract({ bytes, filename, mediaType }) {
+    async extract({ bytes, filename, mediaType, password }) {
       const form = new FormData();
       form.append('file', new Blob([new Uint8Array(bytes)], { type: mediaType }), filename);
+      if (password !== undefined) form.append('password', password);
       const r = await call<{ text: string }>(service, `${base}/convert`, { method: 'POST', body: form }, timeoutMs);
       return { text: r.text ?? '' };
     },

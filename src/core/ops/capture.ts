@@ -3,6 +3,7 @@ import { enqueue } from '../jobs';
 import { detectMediaType } from '../media';
 import type { Actor, Deps } from '../ports';
 import { err, ok, type Result } from '../result';
+import { checkPassword, readWithPassword, unlock } from './unlock';
 
 export interface CaptureInput {
   source: 'mcp' | 'cli' | 'web';
@@ -16,6 +17,8 @@ export interface CaptureInput {
   title?: string | null;
   occurredAt?: string | null;
   tags?: string[];
+  /** Opens an encrypted PDF, read now instead of in the background. Never stored. */
+  password?: string | null;
   maxBytes: number;
 }
 
@@ -25,6 +28,8 @@ export interface CaptureResult {
   deduped: boolean;
   sha256: string | null;
   mediaType: string | null;
+  /** Only with a password that did not open the file: the memory is stored anyway. */
+  unlock?: { code: string; message: string };
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -32,6 +37,8 @@ const MAX_TEXT = 500_000;
 
 /**
  * Stores first, reads later. The ack never waits for a lane: reading is a job.
+ * The one exception is a password: it cannot wait in the queue, so the file is
+ * read in this call, after it is stored.
  * The blob is written before the row, because a blob without a row is harmless
  * and a row pointing at a missing blob is worse than no row.
  */
@@ -50,6 +57,10 @@ export async function capture(deps: Deps, actor: Actor, input: CaptureInput): Pr
   }
   if (input.occurredAt && !ISO_DATE.test(input.occurredAt)) return err('invalid', 'occurred_at must be YYYY-MM-DD');
   if (text && text.length > MAX_TEXT) return err('too_large', `text is longer than ${MAX_TEXT} characters`);
+  const pw = checkPassword(input.password);
+  if (pw.kind !== 'ok') return pw;
+  const password = pw.value;
+  if (password && (!bytes || text)) return err('invalid', 'password only opens a file the lanes read: send the file, without text');
 
   let sha: string | null = null;
   let mediaType: string | null = null;
@@ -66,7 +77,14 @@ export async function capture(deps: Deps, actor: Actor, input: CaptureInput): Pr
         `update memories set filename = coalesce(filename, $2),
                 media_type = case when media_type = 'application/octet-stream' then $3 else media_type end
           where id = $1`, [dup.rows[0].id, input.filename ?? null, mediaType]);
-      return ok({ id: dup.rows[0].id, status: dup.rows[0].status, deduped: true, sha256: sha, mediaType });
+      const same = { id: dup.rows[0].id, status: dup.rows[0].status, deduped: true, sha256: sha, mediaType };
+      // The same locked file again, now with its password: that is the retry.
+      if (password && (same.status === 'needs_text' || same.status === 'failed')) {
+        const u = await unlock(deps, actor, same.id, password);
+        return ok(u.kind === 'ok' ? { ...same, status: 'ready' }
+          : { ...same, status: 'needs_text', unlock: { code: u.kind === 'err' ? u.code : 'conflict', message: u.message } });
+      }
+      return ok(same);
     }
     await deps.blobs.put(sha, bytes);
   }
@@ -85,9 +103,16 @@ export async function capture(deps: Deps, actor: Actor, input: CaptureInput): Pr
       [actor.ownerId, input.source, input.occurredAt ?? null, sha, input.filename ?? null, mediaType, note,
        text, text ? 'agent' : null, ready ? 'ready' : 'pending', input.title?.trim() || null, input.tags ?? []]);
     const memoryId = r.rows[0]!.id;
-    await enqueue(db, ready ? 'index' : 'normalize', { memoryId });
+    // With a password the file is read below, in this call: a job would need the
+    // password in the queue.
+    if (!password) await enqueue(db, ready ? 'index' : 'normalize', { memoryId });
     return memoryId;
   });
 
-  return ok({ id, status: ready ? 'ready' : 'pending', deduped: false, sha256: sha, mediaType });
+  const stored = { id, deduped: false, sha256: sha, mediaType };
+  if (!password) return ok({ ...stored, status: ready ? 'ready' : 'pending' });
+  // Stored first, whatever the password does (§3.1): a wrong one leaves it in needs_text.
+  const u = await readWithPassword(deps, id, password);
+  return ok(u.kind === 'ok' ? { ...stored, status: 'ready' }
+    : { ...stored, status: 'needs_text', unlock: { code: u.kind === 'err' ? u.code : 'conflict', message: u.message } });
 }

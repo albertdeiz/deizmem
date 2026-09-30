@@ -10,14 +10,18 @@ import { actorForToken, listSessions, redeemPairingCode, revokeSession, revokeTo
 import { list, original, setHidden, setText, show } from '../../core/ops/memories';
 import { pending, PENDING_KINDS, type PendingKind } from '../../core/ops/pending';
 import { retrieve } from '../../core/ops/retrieve';
+import { reread, unlock } from '../../core/ops/unlock';
 import type { Actor, Deps } from '../../core/ports';
 import type { Result } from '../../core/result';
+import { headerPassword, PASSWORD_HEADER } from '../password-header';
 
 /**
  * The person's window onto their memory. Same ops as MCP and the CLI, no logic of
  * its own. Identity is the pairing of §9: a code from `dm pair` becomes a token
  * that lives in an HttpOnly cookie, and `dm revoke` cuts it like any other.
- * What MCP does not expose, the web does not either: no purge, no reprocess, no pair.
+ * What MCP does not expose, the web does not either: no purge, no bulk reprocess, no
+ * pair. It does re-read one file, and it is where the person types a PDF's password
+ * without it going through the agent's LLM.
  */
 
 const COOKIE = 'dm_web';
@@ -26,6 +30,7 @@ const BY = 'person/web';
 
 const ERR_STATUS: Record<string, number> = {
   invalid: 400, forbidden: 403, not_found: 404, conflict: 409, ambiguous: 409, too_large: 413, unavailable: 503,
+  wrong_password: 422,
 };
 
 /** A Result as HTTP: the body keeps the stable `code`, the prose is the page's. */
@@ -182,6 +187,14 @@ export function webApp(deps: Deps, cfg: Config, log: (s: string) => void) {
     reply(res, await setText(deps, req.actor, String(req.params.id), typeof req.body?.text === 'string' ? req.body.text : '', BY));
   }));
 
+  api.post('/memories/:id/unlock', json, run(async (req, res) => {
+    reply(res, await unlock(deps, req.actor, String(req.params.id), typeof req.body?.password === 'string' ? req.body.password : ''));
+  }));
+
+  api.post('/memories/:id/reread', run(async (req, res) => {
+    reply(res, await reread(deps, req.actor, String(req.params.id)));
+  }));
+
   api.post('/memories/:id/classify', json, run(async (req, res) => {
     const b = req.body ?? {};
     reply(res, await classify(deps, req.actor, {
@@ -205,10 +218,12 @@ export function webApp(deps: Deps, cfg: Config, log: (s: string) => void) {
         }));
       }
       if (!req.body.length) return fail(res, 400, 'invalid', 'empty body: send the file bytes');
+      const password = headerPassword(req);
+      if (!password.ok) return fail(res, 400, 'invalid', `${PASSWORD_HEADER} must be percent-encoded`);
       const q = req.query;
       reply(res, await capture(deps, req.actor, {
         ...base, bytes: req.body, filename: str(q.filename), mediaType: str(q.media_type), note: str(q.note),
-        title: str(q.title), occurredAt: str(q.occurred_at), tags: strings(q.tag),
+        title: str(q.title), occurredAt: str(q.occurred_at), tags: strings(q.tag), password: password.value,
       }));
     }));
 

@@ -27,6 +27,9 @@ checked against the document before it is accepted.
    yes, store immediately — do not hold the capture back for metadata questions. One
    clarifying question at most, and it comes *after* storing.
 8. **Passwords and 2FA codes do not go here.** Point the person to their password manager.
+   The one exception is the password of a PDF they stored: it goes to `memory_unlock` (or
+   `password` in `memory_capture`) and nowhere else — never in a `note`, `text`, fact or
+   title, and never repeated in your reply. The memory uses it once and does not keep it.
 
 ## Capturing
 
@@ -67,13 +70,28 @@ Call `pending_list` and work through it:
 
 | reason | what to do |
 |---|---|
-| `needs_text` | No lane could read it. `memory_original`, read it yourself (vision / transcription), then `memory_set_text`. |
+| `needs_text` | No lane could read it. `memory_original`, read it yourself (vision / transcription), then `memory_set_text`. If `statusDetail` says `password_required`, the PDF is encrypted: see below. |
 | `unclassified` | `domains_list`, pick the domain whose description fits, `memory_classify` (add a title and `occurred_at`). If none fits, propose a new domain to the person. |
 | `unextracted` | For each fact type that applies, `facts_put`. If none applies, `facts_put` with no type and `instances: []`. If documents of a recurring kind have no type, propose one to the person. |
 | `review` | Something you flagged as doubtful: ask the person when convenient. |
 
 Always pass `by` as `"<agent>/<model>"` (e.g. `"hermes/gpt-5.4"`), so a bad model's
 decisions can be re-queued later.
+
+## Encrypted PDFs
+
+A `needs_text` whose `statusDetail` says `password_required` is a PDF with a password. You
+cannot read it either, so do not try `memory_original`.
+
+- Tell the person, and **suggest they type the password in the deizmem web page** (the
+  memory's detail, "Abrir con contraseña"): that way it never passes through you or your
+  model's provider.
+- If they give it to you anyway, call `memory_unlock` with it, once. Do not repeat it, do not
+  store it anywhere else, and do not keep it for later files.
+- `wrong_password` → say so and ask again; `unavailable` → a lane is down, try later.
+- When the person sends a PDF together with its password, `memory_capture` takes `password`
+  (or `POST /capture` with the header `x-dm-password`, percent-encoded). A wrong one still
+  stores the file; the answer's `unlock` says why it was not read.
 
 ## Extracting facts well
 

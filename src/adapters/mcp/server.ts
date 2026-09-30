@@ -6,6 +6,7 @@ import type { Config } from '../../config';
 import { capture } from '../../core/ops/capture';
 import { actorForToken } from '../../core/ops/identity';
 import type { Actor, Deps } from '../../core/ports';
+import { headerPassword, PASSWORD_HEADER } from '../password-header';
 import { INSTRUCTIONS } from './contract';
 import { registerTools, toMcp } from './tools';
 
@@ -47,7 +48,7 @@ const ERR_STATUS: Record<string, number> = { invalid: 400, too_large: 413, not_f
 /**
  * POST /capture: the bytes of one file as the body, its metadata in the query.
  * Same op and same answer as memory_capture, without base64 through the agent's
- * context (CLAUDE.md §5).
+ * context (CLAUDE.md §5). An encrypted PDF's password goes in `x-dm-password`.
  */
 async function captureUpload(deps: Deps, cfg: Config, actor: Actor, req: IncomingMessage, url: URL, res: ServerResponse) {
   let bytes: Buffer;
@@ -57,11 +58,13 @@ async function captureUpload(deps: Deps, cfg: Config, actor: Actor, req: Incomin
     return send(res, 413, { code: 'too_large', message: (e as Error).message });
   }
   if (!bytes.length) return send(res, 400, { code: 'invalid', message: 'empty body: send the file bytes' });
+  const password = headerPassword(req);
+  if (!password.ok) return send(res, 400, { code: 'invalid', message: `${PASSWORD_HEADER} must be percent-encoded` });
   const q = (k: string) => url.searchParams.get(k);
   const r = await capture(deps, actor, {
     source: 'mcp', bytes, filename: q('filename'), mediaType: q('media_type'), note: q('note'),
     title: q('title'), occurredAt: q('occurred_at'), tags: url.searchParams.getAll('tag'),
-    maxBytes: cfg.maxUploadBytes,
+    password: password.value, maxBytes: cfg.maxUploadBytes,
   });
   if (r.kind === 'ok') return send(res, 200, r.value);
   // capture never asks for confirmation; toMcp gives the body the MCP tool would.

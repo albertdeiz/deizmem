@@ -10,7 +10,7 @@ from statistics import median
 
 import pillow_heif
 import pypdfium2 as pdfium
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from PIL import Image
 from rapidocr import RapidOCR
 
@@ -61,8 +61,20 @@ def _read(png: bytes) -> str:
     return "\n".join(lines)
 
 
+def _open_pdf(raw: bytes, password: str | None) -> pdfium.PdfDocument:
+    """A locked PDF answers with a stable code the core reads. The password is
+    never part of an answer or a log."""
+    try:
+        return pdfium.PdfDocument(raw, password=password or None)
+    except pdfium.PdfiumError as e:
+        if "password" in str(e).lower():
+            code = "wrong_password" if password else "password_required"
+            raise HTTPException(status_code=422, detail=f"{code}: the PDF is encrypted") from None
+        raise
+
+
 @app.post("/convert")
-async def convert(file: UploadFile = File(...)) -> dict:
+async def convert(file: UploadFile = File(...), password: str | None = Form(None)) -> dict:
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="empty file")
@@ -70,13 +82,16 @@ async def convert(file: UploadFile = File(...)) -> dict:
         raise HTTPException(status_code=413, detail=f"file exceeds {MAX_BYTES} bytes")
     try:
         if raw[:4] == b"%PDF":
-            pdf = pdfium.PdfDocument(raw)
+            pdf = _open_pdf(raw, password)
             pages = [_read(_png(pdf[i].render(scale=DPI / 72).to_pil())) for i in range(min(len(pdf), MAX_PAGES))]
             text = "\n\n".join(p for p in pages if p.strip())
             truncated = len(pdf) > MAX_PAGES
         else:
             text = _read(_png(Image.open(io.BytesIO(raw))))
             truncated = False
+    except HTTPException:
+        raise
     except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=422, detail=f"ocr failed: {e}") from e
+        msg = str(e).replace(password, "[redacted]") if password else str(e)
+        raise HTTPException(status_code=422, detail=f"ocr failed: {msg}") from None
     return {"text": text, "tool": "rapidocr", "truncated": truncated}

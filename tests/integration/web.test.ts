@@ -4,7 +4,7 @@ import { loadConfig } from '../../src/config';
 import { mintPairingCode } from '../../src/core/ops/identity';
 import { drain } from '../../src/core/worker';
 import { serveWeb } from '../../src/adapters/web/server';
-import { stack, unwrap, type Stack } from '../helpers/stack';
+import { lockedLane, stack, unwrap, type Stack } from '../helpers/stack';
 
 let s: Stack;
 let http: Server;
@@ -89,6 +89,36 @@ describe('web', () => {
     const after = await (await get(cookie, `/api/memories/${fileId}`)).json();
     expect(after.classifiedBy).toBe('person/web');
     expect(after.tags).toEqual(['salud', 'receta']);
+  });
+
+  it('takes a PDF password from the person, and reads a file again', async () => {
+    const cookie = await login();
+    s.deps.lanes.document = lockedLane('mi clave', 'Certificado de cotizaciones previsionales de la AFP, de enero a diciembre, emitido para trámites del empleador.');
+    try {
+      const up = (password: string, body: string) => fetch(`${base}/api/capture?filename=afp.pdf`, {
+        method: 'POST', body,
+        headers: { 'x-dm-web': '1', 'content-type': 'application/pdf', cookie, 'x-dm-password': encodeURIComponent(password) },
+      });
+      const wrong = await (await up('otra', '%PDF-1.7 afp')).json();
+      expect(wrong).toMatchObject({ status: 'needs_text', unlock: { code: 'wrong_password' } });
+      const bad = await post(cookie, `/api/memories/${wrong.id}/unlock`, { password: 'tampoco' });
+      expect(bad.status).toBe(422);
+      expect(await bad.text()).not.toContain('tampoco');
+      const good = await post(cookie, `/api/memories/${wrong.id}/unlock`, { password: 'mi clave' });
+      expect(good.status).toBe(200);
+      const shown = await (await get(cookie, `/api/memories/${wrong.id}`)).json();
+      expect(shown).toMatchObject({ status: 'ready', passwordProtected: true });
+      expect(JSON.stringify(shown)).not.toContain('mi clave');
+      expect((await post(cookie, `/api/memories/${wrong.id}/reread`, {})).status).toBe(409);
+    } finally { s.deps.lanes.document = null; }
+
+    const img = await fetch(`${base}/api/capture?filename=boleta.jpg`, {
+      method: 'POST', headers: { 'x-dm-web': '1', 'content-type': 'image/jpeg', cookie }, body: new Uint8Array([0xff, 0xd8, 0xff, 0, 7]),
+    });
+    const id = (await img.json()).id;
+    await drain(s.deps, () => {});
+    expect((await post(cookie, `/api/memories/${id}/reread`, {})).status).toBe(200);
+    expect((await (await get(cookie, `/api/memories/${id}`)).json()).status).toBe('pending');
   });
 
   it('never serves a stored HTML file inline', async () => {

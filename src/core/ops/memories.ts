@@ -25,6 +25,8 @@ export interface MemoryDetail extends MemorySummary {
   classifiedBy: string | null;
   factsCheckedAt: string | null;
   sha256: string | null;
+  /** Read with a password: no lane reads it again without one. */
+  passwordProtected: boolean;
 }
 
 const SUMMARY_COLS = `m.id, m.title, m.occurred_at, m.captured_at, m.status, m.lane, d.slug as domain,
@@ -108,7 +110,7 @@ export async function show(deps: Deps, actor: Actor, ref: string): Promise<Resul
   if (id.kind !== 'ok') return id;
   const r = await deps.db.query<Row>(
     `select ${SUMMARY_COLS}, m.note, m.normalized_text, m.status_detail, m.domain_confidence,
-            m.classified_by, m.facts_checked_at, m.blob_sha256
+            m.classified_by, m.facts_checked_at, m.blob_sha256, m.password_protected
        from memories m left join domains d on d.id = m.domain_id
       where m.owner_id = $1 and m.id = $2`, [actor.ownerId, id.value]);
   const x = r.rows[0];
@@ -117,6 +119,7 @@ export async function show(deps: Deps, actor: Actor, ref: string): Promise<Resul
     ...summary(x), note: x.note, text: x.normalized_text, statusDetail: x.status_detail,
     domainConfidence: x.domain_confidence, classifiedBy: x.classified_by,
     factsCheckedAt: x.facts_checked_at ? (x.facts_checked_at as Date).toISOString() : null, sha256: x.blob_sha256,
+    passwordProtected: x.password_protected,
   });
 }
 

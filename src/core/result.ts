@@ -10,7 +10,8 @@ export type ErrorCode =
   | 'conflict'
   | 'too_large'
   | 'ambiguous'
-  | 'unavailable';
+  | 'unavailable'
+  | 'wrong_password';
 
 export type Result<T> =
   | { kind: 'ok'; value: T }

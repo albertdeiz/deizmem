@@ -25,9 +25,12 @@ export class LaneRefused extends Error {
   constructor(message: string) { super(message); this.name = 'LaneRefused'; }
 }
 
-/** Bytes to text. One per lane; `null` in `Lanes` means not configured. */
+/**
+ * Bytes to text. One per lane; `null` in `Lanes` means not configured. A
+ * `password` opens an encrypted PDF; the lane uses it for this call and nothing else.
+ */
 export interface Converter {
-  extract(input: { bytes: Buffer; filename: string; mediaType: string }): Promise<{ text: string }>;
+  extract(input: { bytes: Buffer; filename: string; mediaType: string; password?: string }): Promise<{ text: string }>;
   health(): Promise<LaneHealth>;
 }
 

@@ -9,7 +9,7 @@ import { loadConfig } from '../../src/config';
 import { mintPairingCode, redeemPairingCode } from '../../src/core/ops/identity';
 import { drain } from '../../src/core/worker';
 import { serveHttp } from '../../src/adapters/mcp/server';
-import { stack, unwrap, type Stack } from '../helpers/stack';
+import { lockedLane, stack, unwrap, type Stack } from '../helpers/stack';
 
 let s: Stack;
 let http: Server;
@@ -147,6 +147,30 @@ describe('MCP', () => {
     expect((await bad.json()).code).toBe('invalid');
     expect((await up(tokenA, 'filename=vacio.pdf', Buffer.alloc(0))).status).toBe(400);
     expect((await up(tokenA, 'filename=grande.bin', Buffer.alloc(65 * 1024))).status).toBe(413);
+  });
+
+  it('opens an encrypted PDF with a password that never comes back', async () => {
+    s.deps.lanes.document = lockedLane('clave ñandú', 'Cartola de cuenta corriente del banco, período de marzo. Saldo disponible al cierre 1.500.000 pesos chilenos.');
+    try {
+      const c = await client(tokenA);
+      expect((await c.listTools()).tools.map((t) => t.name)).toContain('memory_unlock');
+      const locked = await call(c, 'memory_capture', { content_base64: Buffer.from('%PDF-1.7 cartola').toString('base64'), filename: 'cartola.pdf' });
+      await drain(s.deps, () => {});
+      const wrong = await call(c, 'memory_unlock', { id: locked.data.id, password: 'mala' });
+      expect(wrong).toMatchObject({ isError: true, data: { code: 'wrong_password' } });
+      expect(JSON.stringify(wrong)).not.toContain('mala');
+      const right = await call(c, 'memory_unlock', { id: locked.data.id, password: 'clave ñandú' });
+      expect(right).toMatchObject({ isError: false, data: { status: 'ready' } });
+      expect(JSON.stringify(right)).not.toContain('ñandú');
+
+      // Through POST /capture the password rides in a header, percent-encoded.
+      const up = await fetch(`${base}/capture?filename=cartola2.pdf`, {
+        method: 'POST', body: '%PDF-1.7 cartola 2',
+        headers: { authorization: `Bearer ${tokenA}`, 'x-dm-password': encodeURIComponent('clave ñandú') },
+      });
+      expect(await up.json()).toMatchObject({ status: 'ready', deduped: false });
+      await c.close();
+    } finally { s.deps.lanes.document = null; }
   });
 
   it('isolates owners by token', async () => {

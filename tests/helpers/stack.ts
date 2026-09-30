@@ -1,7 +1,7 @@
 import { migrate, openDb } from '../../src/adapters/db/pg';
 import { memoryBlobStore } from '../../src/adapters/blobs/fs';
 import { createOwner } from '../../src/core/ops/owners';
-import { noLanes, systemClock, type Actor, type Converter, type Deps, type Lanes } from '../../src/core/ports';
+import { LaneRefused, noLanes, systemClock, type Actor, type Converter, type Deps, type Lanes } from '../../src/core/ports';
 
 export const TEST_DB = process.env.DM_TEST_DATABASE_URL ?? 'postgres://deizmem:deizmem@127.0.0.1:55432/deizmem';
 
@@ -32,4 +32,20 @@ export function fakeLane(text: string | Error): Converter {
 export function unwrap<T>(r: { kind: string; value?: T; message?: string }): T {
   if (r.kind !== 'ok') throw new Error(`expected ok, got ${r.kind}: ${r.message}`);
   return r.value as T;
+}
+
+/**
+ * A document lane holding an encrypted PDF that opens with `secret`. It echoes a
+ * wrong password in its refusal on purpose: the core must not let it through.
+ */
+export function lockedLane(secret: string, text: string): Converter {
+  return {
+    async extract({ password }) {
+      if (password === secret) return { text };
+      throw new LaneRefused(password
+        ? `documents answered 422: wrong_password: tried ${password}`
+        : 'documents answered 422: password_required: the PDF is encrypted');
+    },
+    async health() { return { ok: true, detail: 'fake' }; },
+  };
 }

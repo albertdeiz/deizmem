@@ -8,35 +8,28 @@ import { LaneRefused, type Converter, type Deps } from './ports';
 const POOR_TEXT_CHARS = 100;
 const MAX_TEXT = 500_000;
 
-type Lane = 'inline' | 'document' | 'vision' | 'audio';
+export type Lane = 'inline' | 'document' | 'vision' | 'audio';
 
-interface Mem { id: string; owner_id: string; blob_sha256: string | null; media_type: string | null; filename: string | null }
+interface Mem { id: string; owner_id: string; blob_sha256: string | null; media_type: string | null; filename: string | null; password_protected: boolean }
 
 async function setStatus(deps: Deps, id: string, status: string, detail: string | null) {
   await deps.db.query('update memories set status = $2, status_detail = $3 where id = $1', [id, status, detail]);
 }
 
-/**
- * Reads a memory's file into text (§8). Document lane first; a poor PDF falls
- * to the visual lane. If no configured lane can read it, the memory goes to
- * `needs_text` — the agent's queue — instead of failing.
- */
-export async function normalize(deps: Deps, memoryId: string): Promise<void> {
-  const r = await deps.db.query<Mem>(
-    'select id, owner_id, blob_sha256, media_type, filename from memories where id = $1', [memoryId]);
-  const m = r.rows[0];
-  if (!m || !m.blob_sha256) return;
-  const bytes = await deps.blobs.get(m.blob_sha256);
-  if (!bytes) { await setStatus(deps, m.id, 'failed', 'blob missing from storage'); return; }
-  const mediaType = m.media_type ?? 'application/octet-stream';
-  const input = { bytes, filename: m.filename ?? 'file', mediaType };
+export type Reading = { text: string; lane: Lane } | { text: null; detail: string };
 
-  const plan: Array<[Lane, Converter | null]> = [];
+/**
+ * Runs a file through its lanes (§8). Document lane first; a poor PDF falls to
+ * the visual lane. A lane that is down throws, so the caller can retry; a lane
+ * that refuses gives the next one its turn, and its reason ends up in `detail`.
+ */
+export async function readFile(
+  deps: Deps, input: { bytes: Buffer; filename: string; mediaType: string }, password?: string,
+): Promise<Reading> {
+  const { bytes, mediaType } = input;
   const first = laneFor(mediaType);
-  if (first === 'inline') {
-    await store(deps, m.id, bytes.toString('utf8'), 'inline');
-    return;
-  }
+  if (first === 'inline') return { text: bytes.toString('utf8'), lane: 'inline' };
+  const plan: Array<[Lane, Converter | null]> = [];
   if (first === 'document') plan.push(['document', deps.lanes.document]);
   if (first === 'vision' || (first === 'document' && mediaType === 'application/pdf')) plan.push(['vision', deps.lanes.vision]);
   if (first === 'audio') plan.push(['audio', deps.lanes.audio]);
@@ -46,27 +39,48 @@ export async function normalize(deps: Deps, memoryId: string): Promise<void> {
     if (!conv) { tried.push(`${lane}: off`); continue; }
     let text: string;
     try {
-      ({ text } = await conv.extract(input)); // a lane that is down throws: the job retries
+      ({ text } = await conv.extract(password === undefined ? input : { ...input, password }));
     } catch (e) {
       if (!(e instanceof LaneRefused)) throw e;
       tried.push(`${lane}: refused (${e.message.slice(0, 120)})`);
       continue;
     }
-    if (text.trim().length >= (lane === 'document' ? POOR_TEXT_CHARS : 1)) {
-      await store(deps, m.id, text, lane);
-      return;
-    }
+    if (text.trim().length >= (lane === 'document' ? POOR_TEXT_CHARS : 1)) return { text, lane };
     tried.push(`${lane}: no text`);
   }
-  await setStatus(deps, m.id, 'needs_text',
-    plan.length ? tried.join('; ') : `no lane reads ${mediaType}`);
+  return { text: null, detail: plan.length ? tried.join('; ') : `no lane reads ${mediaType}` };
 }
 
-async function store(deps: Deps, id: string, text: string, lane: Lane) {
+/**
+ * Reads a memory's file into text. If no configured lane can read it, the memory
+ * goes to `needs_text` — the agent's queue — instead of failing. A file read with
+ * a password is not read again: the password is gone, and its text stays.
+ */
+export async function normalize(deps: Deps, memoryId: string): Promise<void> {
+  const r = await deps.db.query<Mem>(
+    'select id, owner_id, blob_sha256, media_type, filename, password_protected from memories where id = $1', [memoryId]);
+  const m = r.rows[0];
+  if (!m || !m.blob_sha256 || m.password_protected) return;
+  const bytes = await deps.blobs.get(m.blob_sha256);
+  if (!bytes) { await setStatus(deps, m.id, 'failed', 'blob missing from storage'); return; }
+  const read = await readFile(deps, { bytes, filename: m.filename ?? 'file', mediaType: m.media_type ?? 'application/octet-stream' });
+  if (read.text !== null) await store(deps, m.id, read.text, read.lane);
+  else await setStatus(deps, m.id, 'needs_text', read.detail);
+}
+
+/**
+ * Stores a lane's text and re-indexes. New text means the facts drawn from the
+ * old one are no longer checked against it: back to the agent's queue.
+ */
+export async function store(deps: Deps, id: string, text: string, lane: Lane, extra: { detail?: string; passwordProtected?: boolean } = {}) {
+  const clean = text.slice(0, MAX_TEXT);
   await deps.db.tx(async (db) => {
     await db.query(
-      `update memories set normalized_text = $2, lane = $3, status = 'ready', status_detail = null where id = $1`,
-      [id, text.slice(0, MAX_TEXT), lane]);
+      `update memories set normalized_text = $2, lane = $3, status = 'ready', status_detail = $4,
+              password_protected = password_protected or $5,
+              facts_checked_at = case when normalized_text is distinct from $2 then null else facts_checked_at end
+        where id = $1`,
+      [id, clean, lane, extra.detail ?? null, extra.passwordProtected ?? false]);
     await enqueue(db, 'index', { memoryId: id });
   });
 }

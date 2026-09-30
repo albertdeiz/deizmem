@@ -11,7 +11,7 @@ import type { DoctorReport } from '../../../core/ops/doctor';
 export type { Domain, FactHit, FactType, MemoryDetail, MemorySummary, PendingResult, RetrieveResult, SessionSummary };
 export type Memory = MemoryDetail & { facts: FactHit[] };
 export type Overview = Pick<DoctorReport, 'db' | 'lanes' | 'spaces'> & { pending: PendingResult['counts'] | null; domains: Domain[] };
-export interface CaptureResult { id: string; status: string; deduped: boolean }
+export interface CaptureResult { id: string; status: string; deduped: boolean; unlock?: { code: string; message: string } }
 
 export interface ApiError { status: number; code: string; message: string }
 export type Reply<T> = { ok: true; data: T } | { ok: false; error: ApiError };
@@ -30,10 +30,12 @@ export function qs(params: Record<string, string | number | boolean | string[] |
 }
 
 /** Every write carries x-dm-web: the server refuses a POST without it (cross-site guard). */
-export async function api<T>(method: 'GET' | 'POST', path: string, body?: unknown, raw?: { type: string }): Promise<Reply<T>> {
+export async function api<T>(
+  method: 'GET' | 'POST', path: string, body?: unknown, raw?: { type: string; headers?: Record<string, string> },
+): Promise<Reply<T>> {
   const headers: Record<string, string> = { 'x-dm-web': '1' };
   let payload: BodyInit | undefined;
-  if (raw) { payload = body as Blob; headers['content-type'] = raw.type || 'application/octet-stream'; }
+  if (raw) { payload = body as Blob; Object.assign(headers, raw.headers); headers['content-type'] = raw.type || 'application/octet-stream'; }
   else if (body !== undefined) { payload = JSON.stringify(body); headers['content-type'] = 'application/json'; }
   let r: globalThis.Response;
   try {

@@ -6,6 +6,7 @@ import { capture } from '../../core/ops/capture';
 import { list, original, setHidden, setText, show } from '../../core/ops/memories';
 import { pending, PENDING_KINDS } from '../../core/ops/pending';
 import { retrieve } from '../../core/ops/retrieve';
+import { MAX_PASSWORD, unlock } from '../../core/ops/unlock';
 import type { Actor, Deps } from '../../core/ports';
 import type { Result } from '../../core/result';
 import { readAllowedPath } from './read-path';
@@ -45,7 +46,7 @@ export function registerTools(server: McpServer, deps: Deps, actor: Actor, cfg: 
   const tool = strictTools(server);
 
   tool('memory_capture', {
-    description: 'Store a file or a note. Returns at once; reading the file happens in the background. Send `text` when you already have the content (a transcript, a handwriting read) and lanes are skipped. `note` is the person\'s own words. For a file you cannot copy exactly as base64 (anything beyond a few KB), POST its raw bytes to /capture next to this /mcp endpoint, with the same Bearer and filename, note, title, occurred_at, tag in the query. If the file sits in a directory the server shares with you, send its absolute `path` instead and the server reads it.',
+    description: 'Store a file or a note. Returns at once; reading the file happens in the background. Send `text` when you already have the content (a transcript, a handwriting read) and lanes are skipped. `note` is the person\'s own words. For a file you cannot copy exactly as base64 (anything beyond a few KB), POST its raw bytes to /capture next to this /mcp endpoint, with the same Bearer and filename, note, title, occurred_at, tag in the query. If the file sits in a directory the server shares with you, send its absolute `path` instead and the server reads it. For an encrypted PDF, pass `password`: the file is read in this call, the password is used once and never stored, and a wrong one still stores the file (the answer carries `unlock` with the reason).',
     inputSchema: {
       content_base64: z.string().optional().describe('The file bytes, base64'),
       path: z.string().optional().describe('Absolute path of the file on the server, inside a shared directory. Instead of content_base64'),
@@ -56,6 +57,7 @@ export function registerTools(server: McpServer, deps: Deps, actor: Actor, cfg: 
       title: z.string().optional(),
       occurred_at: date.optional().describe('When the event happened, if known'),
       tags: z.array(z.string()).optional(),
+      password: z.string().min(1).max(MAX_PASSWORD).optional().describe('Opens an encrypted PDF. Used once, never stored or returned'),
     },
   }, async (a) => {
     let bytes: Buffer | null = a.content_base64 ? Buffer.from(a.content_base64, 'base64') : null;
@@ -69,7 +71,7 @@ export function registerTools(server: McpServer, deps: Deps, actor: Actor, cfg: 
     }
     return toMcp(await capture(deps, actor, {
       source: 'mcp', bytes, filename, mediaType: a.media_type, text: a.text, note: a.note,
-      title: a.title, occurredAt: a.occurred_at, tags: a.tags, maxBytes: cfg.maxUploadBytes,
+      title: a.title, occurredAt: a.occurred_at, tags: a.tags, password: a.password, maxBytes: cfg.maxUploadBytes,
     }));
   });
 
@@ -114,6 +116,11 @@ export function registerTools(server: McpServer, deps: Deps, actor: Actor, cfg: 
     description: 'Provide the text of a memory no lane could read (status needs_text). Replaces the extracted text, never the person\'s note.',
     inputSchema: { id: z.string(), text: z.string().min(1), by: byField },
   }, async (a) => toMcp(await setText(deps, actor, a.id, a.text, a.by)));
+
+  tool('memory_unlock', {
+    description: 'Open an encrypted PDF already stored (needs_text with password_required, or a wrong password before). Reads it now; the password is used once, never stored, and never appears in an answer. Never write the password into a note, text, fact or your own reply.',
+    inputSchema: { id: z.string(), password: z.string().min(1).max(MAX_PASSWORD) },
+  }, async (a) => toMcp(await unlock(deps, actor, a.id, a.password)));
 
   tool('memory_hide', {
     description: 'Hide a memory from results (reversible). Nothing is deleted.',
