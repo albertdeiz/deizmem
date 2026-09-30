@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Server } from 'node:http';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { loadConfig } from '../../src/config';
@@ -13,6 +16,7 @@ let http: Server;
 let base: string;
 let tokenA: string;
 let tokenB: string;
+let inbox: string;
 
 async function client(token: string) {
   const c = new Client({ name: 'test', version: '0' });
@@ -29,7 +33,8 @@ const call = async (c: Client, name: string, args: Record<string, unknown>) => {
 
 beforeAll(async () => {
   s = await stack();
-  const cfg = { ...loadConfig({}), mcpHost: '127.0.0.1', mcpPort: 0, maxUploadBytes: 64 * 1024 };
+  inbox = await mkdtemp(join(tmpdir(), 'dm-inbox-'));
+  const cfg = { ...loadConfig({}), mcpHost: '127.0.0.1', mcpPort: 0, maxUploadBytes: 64 * 1024, captureDirs: [inbox] };
   http = serveHttp(s.deps, cfg, () => {});
   await new Promise((r) => http.once('listening', r));
   const addr = http.address();
@@ -37,7 +42,7 @@ beforeAll(async () => {
   tokenA = unwrap(await redeemPairingCode(s.deps, unwrap(await mintPairingCode(s.deps, s.actor)).code, 'a')).token;
   tokenB = unwrap(await redeemPairingCode(s.deps, unwrap(await mintPairingCode(s.deps, s.other)).code, 'b')).token;
 });
-afterAll(async () => { http.close(); await s.close(); });
+afterAll(async () => { http.close(); await s.close(); await rm(inbox, { recursive: true, force: true }); });
 
 describe('MCP', () => {
   it('refuses without a valid token', async () => {
@@ -84,6 +89,37 @@ describe('MCP', () => {
     const cap = await call(c, 'memory_capture', { content_base64: bytes.toString('base64'), filename: 'x.txt' });
     const o = await call(c, 'memory_original', { id: cap.data.id });
     expect(Buffer.from(o.data.content_base64, 'base64').equals(bytes)).toBe(true);
+    await c.close();
+  });
+
+  it('refuses an argument no tool takes, instead of storing what is left', async () => {
+    const c = await client(tokenA);
+    const before = await call(c, 'memory_search', {});
+    const r = await c.callTool({ name: 'memory_capture', arguments: { url: 'https://x/poliza.pdf', note: 'la póliza' } });
+    expect(r.isError).toBe(true);
+    expect(JSON.stringify(r.content)).toContain('url');
+    expect((await call(c, 'memory_search', {})).data.items.length).toBe(before.data.items.length);
+    await c.close();
+  });
+
+  it('captures a file by path from a shared directory, and nothing outside it', async () => {
+    const c = await client(tokenA);
+    const bytes = Buffer.from('Póliza BP-9344586 vence 01/03/2026\n');
+    await writeFile(join(inbox, 'poliza.txt'), bytes);
+    const cap = await call(c, 'memory_capture', { path: join(inbox, 'poliza.txt'), note: 'seguro del auto' });
+    expect(cap.isError).toBe(false);
+    expect(cap.data.sha256).toMatch(/^[0-9a-f]{64}$/);
+    const o = await call(c, 'memory_original', { id: cap.data.id });
+    expect(o.data.filename).toBe('poliza.txt');
+    expect(Buffer.from(o.data.content_base64, 'base64').equals(bytes)).toBe(true);
+
+    const out = await call(c, 'memory_capture', { path: '/etc/hosts' });
+    expect(out.isError).toBe(true);
+    expect(out.data.code).toBe('forbidden');
+    const missing = await call(c, 'memory_capture', { path: join(inbox, 'nope.pdf') });
+    expect(missing.data.code).toBe('not_found');
+    const both = await call(c, 'memory_capture', { path: join(inbox, 'poliza.txt'), content_base64: 'eA==' });
+    expect(both.data.code).toBe('invalid');
     await c.close();
   });
 

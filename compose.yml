@@ -54,6 +54,12 @@ services:
     environment:
       <<: *app-env
       DM_MCP_HOST: 0.0.0.0
+      # memory_capture reads a `path` only from here. Hermes mounts the same host
+      # directory to drop files in; empty turns capture by path off.
+      DM_CAPTURE_DIRS: ${DM_CAPTURE_DIRS-/inbox}
+    volumes:
+      - ${DEIZMEM_DATA:-./data}/blobs:/data/blobs
+      - ${DEIZMEM_DATA:-./data}/inbox:/inbox:ro
     ports:
       - "127.0.0.1:4319:4319"
     networks:

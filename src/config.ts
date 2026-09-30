@@ -1,3 +1,5 @@
+import { isAbsolute } from 'node:path';
+
 /** Everything the process reads from the environment, in one place. */
 export interface Config {
   databaseUrl: string;
@@ -14,6 +16,16 @@ export interface Config {
   /** The built React bundle (npm run build:web). */
   webRoot: string;
   maxUploadBytes: number;
+  /** Where memory_capture may read a `path` from. Empty: capture by path is off. */
+  captureDirs: string[];
+}
+
+/** DM_CAPTURE_DIRS: absolute directories, colon-separated. A relative one is a mistake, and loud. */
+function dirs(v: string | undefined): string[] {
+  const list = (v ?? '').split(':').map((d) => d.trim()).filter(Boolean);
+  const bad = list.filter((d) => !isAbsolute(d));
+  if (bad.length) throw new Error(`DM_CAPTURE_DIRS must be absolute paths: ${bad.join(', ')}`);
+  return list;
 }
 
 const opt = (v: string | undefined) => (v && v.trim() ? v.trim() : null);
@@ -33,5 +45,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     webPort: Number(env.DM_WEB_PORT ?? 4320),
     webRoot: env.DM_WEB_ROOT ?? './dist/web',
     maxUploadBytes: Number(env.DM_MAX_UPLOAD_BYTES ?? 25 * 1024 * 1024),
+    captureDirs: dirs(env.DM_CAPTURE_DIRS),
   };
 }

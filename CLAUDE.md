@@ -118,9 +118,23 @@ fact_type_create · fact_type_edit · fact_type_archive
 cuerpo son los bytes crudos, y `filename`, `media_type`, `note`, `title`, `occurred_at` y
 `tag` van en la query. Llama a la misma operación que `memory_capture` y responde lo mismo.
 Existe porque un modelo no puede copiar un archivo en base64 sin corromperlo: con esto, los
-bytes van del disco del agente a la memoria sin pasar por su contexto. **No hay ruta ni
-URL**: el servidor no ve el disco del agente, leer el suyo le abriría ese disco al agente, y
-descargar una URL sacaría a la memoria del host.
+bytes van del disco del agente a la memoria sin pasar por su contexto. **No hay URL, y
+la ruta solo vale dentro de un directorio compartido** (abajo): el servidor no ve el disco
+del agente, leer el suyo entero le abriría ese disco al agente, y descargar una URL sacaría a la memoria del host.
+
+**Un archivo que el agente ya dejó en un directorio compartido entra por `path`** en
+`memory_capture`. Es para el agente que no puede mandar los bytes (su acceso a archivos
+está caído, o no tiene shell). El servidor lee solo dentro de `DM_CAPTURE_DIRS`, que en
+compose es `/inbox`: `${DEIZMEM_DATA}/inbox` del Pi, montado de solo lectura en `mcp`, y que
+el agente monta para dejar archivos. La ruta tiene que ser absoluta, se resuelve con
+`realpath` (un symlink o un `..` no salen del directorio), tiene que ser un archivo regular
+y respeta el mismo límite de tamaño. Con `DM_CAPTURE_DIRS` vacío, `path` responde
+`forbidden`. **El servidor nunca lee fuera de ese directorio**, y una URL sigue sin existir.
+
+**Un argumento desconocido es un error.** Toda herramienta MCP valida su entrada estricta: el
+SDK, por defecto, descarta en silencio lo que no conoce y la llamada sigue con lo que queda,
+así que una captura con un parámetro mal escrito y una nota volvía `ready` guardando solo
+la nota.
 
 **`pending_list`** es la cola de trabajo del agente: `needs_text` · `unclassified` ·
 `unextracted` (tiene texto pero `facts_checked_at` es null) · `review`.

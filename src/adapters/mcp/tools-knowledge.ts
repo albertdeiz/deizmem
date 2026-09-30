@@ -6,7 +6,7 @@ import { archiveFactType, createFactType, editFactType, listFactTypes } from '..
 import { archiveDomain, classify, createDomain, editDomain, listDomains, mergeDomains } from '../../core/ops/domains';
 import { verify } from '../../core/ops/verify';
 import type { Actor, Deps } from '../../core/ports';
-import { byField, toMcp } from './tools';
+import { byField, strictTools, toMcp } from './tools';
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD');
 const confirmField = z.boolean().optional().describe('Only after the person explicitly said yes to the change');
@@ -21,7 +21,7 @@ const field = z.object({
 
 /** Domains, classification, facts and verify (S3). */
 export function registerKnowledgeTools(server: McpServer, deps: Deps, actor: Actor): void {
-  const tool = server.registerTool.bind(server);
+  const tool = strictTools(server);
 
   tool('domains_list', {
     description: 'The person\'s categories. Each description is the prompt to classify with.',

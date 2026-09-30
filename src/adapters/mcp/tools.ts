@@ -8,6 +8,7 @@ import { pending, PENDING_KINDS } from '../../core/ops/pending';
 import { retrieve } from '../../core/ops/retrieve';
 import type { Actor, Deps } from '../../core/ports';
 import type { Result } from '../../core/result';
+import { readAllowedPath } from './read-path';
 import { registerKnowledgeTools } from './tools-knowledge';
 
 /** Result → MCP. ok → structured value; err/confirmation → isError with a stable code. */
@@ -26,16 +27,30 @@ export function toMcp<T>(r: Result<T>): CallToolResult {
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD');
 export const byField = z.string().min(1).max(120).describe('Who decided: "<agent>/<model>", e.g. "hermes/qwen3-8b"');
 
+/**
+ * registerTool with a strict input schema. By default an unknown argument is dropped
+ * in silence, and the call goes through with what is left: a capture sent with an
+ * unsupported `path` and a note came back ready, holding only the note. Refusing the
+ * argument makes the agent see its mistake.
+ */
+export function strictTools(server: McpServer) {
+  return <S extends z.ZodRawShape>(
+    name: string, config: { description: string; inputSchema: S },
+    cb: (a: z.infer<z.ZodObject<S>>) => Promise<CallToolResult>,
+  ) => server.registerTool(name, { ...config, inputSchema: z.strictObject(config.inputSchema) }, cb as never);
+}
+
 /** Registers every tool. The actor is fixed per connection: no tool takes an owner. */
 export function registerTools(server: McpServer, deps: Deps, actor: Actor, cfg: Config): void {
-  const tool = server.registerTool.bind(server);
+  const tool = strictTools(server);
 
   tool('memory_capture', {
-    description: 'Store a file or a note. Returns at once; reading the file happens in the background. Send `text` when you already have the content (a transcript, a handwriting read) and lanes are skipped. `note` is the person\'s own words. For a file you cannot copy exactly as base64 (anything beyond a few KB), POST its raw bytes to /capture next to this /mcp endpoint, with the same Bearer and filename, note, title, occurred_at, tag in the query.',
+    description: 'Store a file or a note. Returns at once; reading the file happens in the background. Send `text` when you already have the content (a transcript, a handwriting read) and lanes are skipped. `note` is the person\'s own words. For a file you cannot copy exactly as base64 (anything beyond a few KB), POST its raw bytes to /capture next to this /mcp endpoint, with the same Bearer and filename, note, title, occurred_at, tag in the query. If the file sits in a directory the server shares with you, send its absolute `path` instead and the server reads it.',
     inputSchema: {
       content_base64: z.string().optional().describe('The file bytes, base64'),
-      filename: z.string().optional().describe('Only with content_base64'),
-      media_type: z.string().optional().describe('Only with content_base64'),
+      path: z.string().optional().describe('Absolute path of the file on the server, inside a shared directory. Instead of content_base64'),
+      filename: z.string().optional().describe('Only with content_base64 or path'),
+      media_type: z.string().optional().describe('Only with content_base64 or path'),
       text: z.string().optional(),
       note: z.string().optional(),
       title: z.string().optional(),
@@ -43,9 +58,17 @@ export function registerTools(server: McpServer, deps: Deps, actor: Actor, cfg: 
       tags: z.array(z.string()).optional(),
     },
   }, async (a) => {
-    const bytes = a.content_base64 ? Buffer.from(a.content_base64, 'base64') : null;
+    let bytes: Buffer | null = a.content_base64 ? Buffer.from(a.content_base64, 'base64') : null;
+    let filename = a.filename;
+    if (a.path !== undefined) {
+      if (bytes) return toMcp({ kind: 'err', code: 'invalid', message: 'send content_base64 or path, not both' });
+      const f = await readAllowedPath(a.path, cfg.captureDirs, cfg.maxUploadBytes);
+      if (f.kind !== 'ok') return toMcp(f);
+      bytes = f.value.bytes;
+      filename = a.filename ?? f.value.filename;
+    }
     return toMcp(await capture(deps, actor, {
-      source: 'mcp', bytes, filename: a.filename, mediaType: a.media_type, text: a.text, note: a.note,
+      source: 'mcp', bytes, filename, mediaType: a.media_type, text: a.text, note: a.note,
       title: a.title, occurredAt: a.occurred_at, tags: a.tags, maxBytes: cfg.maxUploadBytes,
     }));
   });

@@ -39,6 +39,11 @@ checked against the document before it is accepted.
     the `/mcp` endpoint and with the same token:
     `curl --data-binary @file -H "Authorization: Bearer $TOKEN" "<base>/capture?filename=…&note=…"`.
     It answers like `memory_capture`. Never send a `filename` without the file: it is rejected.
+  - **If you cannot send the bytes at all**, copy the file into the directory you share with
+    the memory and call `memory_capture` with its absolute `path` (the path as the server
+    sees it, e.g. `/inbox/poliza.pdf`). Anything outside that directory is refused.
+  - An argument the tool does not list is an error, not ignored. If a capture fails, it did
+    not store anything: fix the call, do not assume it went through.
   - **no** → do not store it, do not ask again for that file, and do not read it "just in
     case". A file the person declined is not context.
   - The question is about *this* file. Do not generalise a yes or a no to later ones.

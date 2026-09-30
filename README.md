@@ -127,7 +127,7 @@ To cut access: `dm sessions`, then `dm revoke <id>`.
 
 | Tool | Purpose |
 |---|---|
-| `memory_capture` | store a file (base64) or a note; `text` if the agent already has the content |
+| `memory_capture` | store a file (base64, or `path` in a shared directory) or a note; `text` if the agent already has the content |
 | `memory_retrieve` | passages that answer a question, with a `memoryId` to cite |
 | `memory_search` · `memory_get` · `memory_original` | list, view details, download the original |
 | `memory_set_text` · `memory_hide` | supply the text of something unreadable; hide |
@@ -145,6 +145,12 @@ the same token; metadata goes in the query (`filename`, `media_type`, `note`, `t
 curl --data-binary @policy.pdf -H "Authorization: Bearer $DEIZMEM_MCP_TOKEN" \
   "http://127.0.0.1:4319/capture?filename=policy.pdf&note=car%20insurance"
 ```
+
+An agent that cannot send bytes at all drops the file in the directory it shares with the
+memory and passes `path`. The server reads only inside `DM_CAPTURE_DIRS` (`/inbox` in compose,
+`${DEIZMEM_DATA}/inbox` on the host, mounted read-only); anything else is `forbidden`.
+
+Every tool rejects an argument it does not list, instead of dropping it and carrying on.
 
 No tool takes an owner: it comes from the token. There is no `purge` and no maintenance over
 MCP.
@@ -201,6 +207,7 @@ Ids are accepted in full or as a unique prefix of 6 or more characters.
 | `EMBED_MODEL` | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | changing it triggers a reindex |
 | `WHISPER_MODEL` | `base` | `small` transcribes better and takes about 3× longer |
 | `DM_MAX_UPLOAD_BYTES` | 25 MB | per-file limit |
+| `DM_CAPTURE_DIRS` | empty (`/inbox` in compose) | absolute directories, `:`-separated, where `memory_capture` may read a `path`; empty = off |
 | `DM_WEB_PORT` | `4320` | the web's port (`DM_WEB_HOST`, default `127.0.0.1`) |
 | `DM_WEB_ROOT` | `./dist/web` | the built page; `/app/web` in the image |
 | `DM_UID` · `DM_GID` | `1000` | host owner of the data directory |
