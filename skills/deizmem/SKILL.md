@@ -35,23 +35,34 @@ checked against the document before it is accepted.
 
 - A file arrives → **ask whether it goes into the memory**, and wait for the answer.
   One short question, e.g. "¿Lo guardo en deizmem?". Nothing is stored until they say yes.
-  - **yes** → `memory_capture` with `content_base64`, `filename`, and the person's words as
-    `note`. Do not wait for it to be read.
-  - **A file beyond a few KB** does not go through `content_base64`: you cannot copy it
-    exactly. If you can run a command, send the bytes from disk to `POST /capture`, next to
-    the `/mcp` endpoint and with the same token:
-    `curl --data-binary @file -H "Authorization: Bearer $TOKEN" "<base>/capture?filename=…&note=…"`.
-    It answers like `memory_capture`. Never send a `filename` without the file: it is rejected.
-  - **If you cannot send the bytes at all**, copy the file into the directory you share with
-    the memory and call `memory_capture` with its absolute `path` (the path as the server
-    sees it, e.g. `/inbox/poliza.pdf`). Anything outside that directory is refused.
+  - **yes** → store **the file itself**, with the person's words as `note`. Do not wait for
+    it to be read. Pick the first route that applies:
+    1. **The file is on your disk** (an attachment cache, a download) and you share a
+       directory with the memory → copy it there and call `memory_capture` with its absolute
+       `path` as the server sees it (e.g. `cp <file> /inbox/poliza.pdf`, then
+       `path: "/inbox/poliza.pdf"`). Anything outside that directory is refused. This is
+       the default: the bytes never pass through your context.
+    2. **No shared directory, but you can run a command** → send the bytes from disk to
+       `POST /capture`, next to the `/mcp` endpoint and with the same token:
+       `curl --data-binary @file -H "Authorization: Bearer $TOKEN" "<base>/capture?filename=…&note=…"`.
+       It answers like `memory_capture`.
+    3. **Only a file of a few KB, and neither of the above** → `content_base64` with
+       `filename`. Beyond a few KB you cannot copy base64 exactly: do not try.
+  - **Do not extract the text yourself and store it as `text` while you have the file.** No
+    browser, no CDN library, no hand-made PDF reader: the memory reads the file with its own
+    lanes, keeps the original, and its text is complete. Storing your extract instead loses
+    the original and whatever you cut. Only if every route above failed, store the text
+    *and* tell the person which route failed and with which error.
+  - Never send a `filename` without the file: it is rejected.
   - An argument the tool does not list is an error, not ignored. If a capture fails, it did
     not store anything: fix the call, do not assume it went through.
   - **no** → do not store it, do not ask again for that file, and do not read it "just in
     case". A file the person declined is not context.
   - The question is about *this* file. Do not generalise a yes or a no to later ones.
-- If you already have the content (you transcribed a voice note, read handwriting with
-  vision), send it as `text`: the memory skips its own lanes.
+- `text` is for content that has no file (something the person typed or dictated to you):
+  the memory skips its own lanes. When there is a file, capture the file; if the memory
+  cannot read it (`needs_text`), put your own reading (vision, transcription) on that memory
+  with `memory_set_text`.
 - Pass `occurred_at` when the date of the event is obvious from the conversation.
 
 ## Answering
